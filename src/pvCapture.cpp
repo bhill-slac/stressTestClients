@@ -6,24 +6,30 @@
 #include <vector>
 #include <set>
 #include <deque>
+#include <queue>
 #include <string>
 #include <istream>
 #include <fstream>
 #include <sstream>
 
+#include <math.h>
 #include <stdio.h>
 
 #include <epicsStdlib.h>
 #include <epicsGetopt.h>
 #include <epicsExit.h>
 #include <epicsGuard.h>
+#include <epicsTime.h>
+#include <epicsTypes.h>
 
 #include <pv/pvData.h>
 #include <pv/logger.h>
 #include <pv/lock.h>
 #include <pv/event.h>
+#include <pv/monitor.h>
 #include <pv/thread.h>
 #include <pv/reftrack.h>
+#include <pv/timeStamp.h>
 
 #include <pv/caProvider.h>
 #include <pv/logger.h>
@@ -236,13 +242,24 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 
 	MonTracker(WorkQueue& monwork, pvac::ClientChannel& channel, const epics::pvData::PVStructurePtr& pvRequest, bool fShow)
 		:monwork(monwork)
+		,m_QueueSizeMax( 262144	)
 		,valid()
 		,fShow(fShow)
 		,mon(channel.monitor(this, pvRequest))
 	{}
 	virtual ~MonTracker() {mon.cancel();}
 
-	WorkQueue& monwork;
+    epicsMutex		queueLock;
+	WorkQueue	&	monwork;
+	
+	typedef	struct _tsReal
+	{
+		epicsTimeStamp	ts;
+		double			val;
+		_tsReal( const epicsTimeStamp & newTs, double newVal ) : ts(newTs), val(newVal){ };
+	}	t_TsReal;
+	size_t					m_QueueSizeMax;
+	std::deque<t_TsReal>	m_ValueQueue;
 
 	epics::pvData::BitSet valid; // only access for process()
 	bool	fShow;
@@ -261,28 +278,72 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 		monwork.push(shared_from_this(), evt);
 	}
 
-#if 0
 	/// capture is called for each pvAccess MonitorEvent::Data on the WorkQueue
-	virtual void process(const pvac::MonitorEvent& evt) OVERRIDE FINAL
+	virtual void capture(const pvac::MonitorEvent& evt) OVERRIDE FINAL
 	{
 		assert( evt.event == pvac::MonitorEvent::Data );
-		// mon.name() should be pvName
-		// To see text representation
-		// epics::pvData::PVStructure::Formatter	fmt( mon.root->stream().format(outmode) );
-		// fmt.show(mon.changed); // highlight none
-		// std::cout << fmt << endl;
-		// or to fetch just the value field (see pvDataCPP pvData.h)
-		// epics::pvData::PVField::const_shared_pointer valfld(event.value->getSubField("value"));
-		// if(!valfld)
-		//     valfld = event.value;
-		// std::cout << *valfld
-		// event.value->getPVFields()
-		// event.value->getSubFieldT<epics::pvData::PVDouble>("value")
-		// event.value->getSubFieldT<epics::pvData::PVInt>("value")
-		// event.value->getSubFieldT<epics::pvData::PVULong>("value")
-		// event.value->getStructure()
+		//for ( epics::pvAccess::MonitorElement::Ref	it(mon); it; ++it )
+		//	epics::pvAccess::MonitorElement	&	element(*it);
+		//epics::pvAccess::Monitor::shared_pointer	pmon(&mon.root);
+		//epics::pvAccess::MonitorElement::Ref		element(pmon);
+		std::tr1::shared_ptr<const epics::pvData::PVStructure>	pvStruct = mon.root;
+		//if ( element )
+		if ( pvStruct )
+		{
+			// mon.name() should be pvName
+			// To see text representation
+			// epics::pvData::PVStructure::Formatter	fmt( mon.root->stream().format(outmode) );
+			// fmt.show(mon.changed); // highlight none
+			// std::cout << fmt << endl;
+			// or to fetch just the value field (see pvDataCPP pvData.h)
+			// epics::pvData::PVField::const_shared_pointer valfld(element->pvStructurePtr->getSubField("value"));
+			// if(!valfld)
+			//     valfld = element->pvStructurePtr.value;
+			// std::cout << *valfld
+			// element->pvStructurePtr->getPVFields()
+			// element->pvStructurePtr->getSubField<epics::pvData::PVDouble>("value")
+			// element->pvStructurePtr->getSubField<epics::pvData::PVInt>("value")
+			// element->pvStructurePtr->getSubFieldT<epics::pvData::PVULong>("value")
+			// element->pvStructurePtr->getStructure()
+			try
+			{
+				// std::tr1::shared_ptr<epics::pvData::PVDouble>	pValue	= element->pvStructurePtr->getSubField<epics::pvData::PVDouble>("value");
+				std::tr1::shared_ptr<const epics::pvData::PVDouble>	pValue	= pvStruct->getSubField<epics::pvData::PVDouble>("value");
+				double			value			= FP_NAN;
+				if ( pValue )
+					value = pValue->getAs<double>();
+				epicsUInt32		secPastEpoch	= 0;
+				epicsUInt32		nsec			= 0;
+
+				//std::tr1::shared_ptr<epics::pvData::TimeStamp>	pTs		= element->pvStructurePtr->getSubField<epics::pvData::TimeStamp>("timeStamp");
+				std::tr1::shared_ptr<const epics::pvData::TimeStamp>	pTs		= pvStruct->getSubField<epics::pvData::TimeStamp>("timeStamp");
+				if ( pTs )
+				{
+					secPastEpoch	= pTs->getSecondsPastEpoch();
+					nsec			= pTs->getNanoseconds();
+				}
+				epicsTimeStamp	timeStamp;
+				timeStamp.secPastEpoch = secPastEpoch;
+				timeStamp.nsec = nsec;
+				//epics::pvData::TimeStamp	timeStamp( secPastEpoch, nsec );
+				t_TsReal	tsValue( timeStamp, value );
+
+				epicsGuard<epicsMutex> G(queueLock);
+				if ( m_ValueQueue.size() >= m_QueueSizeMax )
+				{
+					m_ValueQueue.pop_front();
+				}
+				// m_ValueQueue.emplace_back( tsValue );
+				m_ValueQueue.push_back( tsValue );
+				// typedef	struct _TtsReal { epicsTimeStamp ts, double	val; }	t_TsReal;
+			}
+			catch(std::exception& e)
+			{
+				std::cout << "Error in capture handler : " << e.what() << "\n";
+			}
+		}
 	}
-#endif
+
 	/// process is called for each pvAccess event on the WorkQueue
 	virtual void process(const pvac::MonitorEvent& evt) OVERRIDE FINAL
 	{
@@ -305,26 +366,22 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 			for(n=0; n<2 && mon.poll(); n++) {
 				valid |= mon.changed;
 
-#if 0
 				// Capture the new value
-				capture( event, valid, mon.changed );
-				if ( fShow >= 1 )
+				capture( evt );
+				if ( fShow )
 				{
-#endif
-				epics::pvData::PVStructure::Formatter fmt(mon.root->stream()
-												.format(outmode));
+					epics::pvData::PVStructure::Formatter fmt(mon.root->stream()
+													.format(outmode));
 
-				if(verbosity>=3)
-					fmt.highlight(mon.changed); // show all
-				else if(verbosity>=2)
-					fmt.highlight(mon.changed).show(valid);
-				else
-					fmt.show(mon.changed); // highlight none
+					if(verbosity>=3)
+						fmt.highlight(mon.changed); // show all
+					else if(verbosity>=2)
+						fmt.highlight(mon.changed).show(valid);
+					else
+						fmt.show(mon.changed); // highlight none
 
-				std::cout << std::setw(pvnamewidth) << std::left << mon.name() << ' ' << fmt;
-#if 0
+					std::cout << std::setw(pvnamewidth) << std::left << mon.name() << ' ' << fmt;
 				}
-#endif
 			}
 			if(n==2) {
 				// too many updates, re-queue to balance with others
@@ -353,13 +410,13 @@ int MAIN (int argc, char *argv[])
 	try {
 		int opt;					/* getopt() current option */
 		bool monitor	= true;
-		bool fShow		= true;
+		bool fShow		= false;
 
 		epics::RefMonitor refmon;
 
 		// ================ Parse Arguments
 
-		while ((opt = getopt(argc, argv, ":hvVRM:r:w:tmp:qdcF:f:ni")) != -1) {
+		while ((opt = getopt(argc, argv, ":hvVSRM:r:w:tmp:qdcF:f:ni")) != -1) {
 			switch (opt) {
 			case 'h':				/* Print usage */
 				usage();
@@ -377,6 +434,9 @@ int MAIN (int argc, char *argv[])
 				fprintf(stdout, "%s\n", version.getVersionString().c_str());
 				return 0;
 			}
+			case 'S':
+				fShow = true;
+				break;
 			case 'R':
 				refmon.start(5.0);
 				break;
