@@ -48,15 +48,17 @@
 #define PVA_CAPTURE_MAINTENANCE_VERSION		0
 #define PVA_CAPTURE_DEVELOPMENT_FLAG		1
 
+namespace pvd = epics::pvData;
+
 namespace {
 
 // From pvAccessCPP/pvtoolsSrc/pvutils.cpp
 double timeout = 5.0;
 bool debugFlag = false;
-epics::pvData::PVStructure::Formatter::format_t outmode = epics::pvData::PVStructure::Formatter::NT;
-// outmode = epics::pvData::PVStructure::Formatter::Raw;
-// outmode = epics::pvData::PVStructure::Formatter::NT;
-// outmode = epics::pvData::PVStructure::Formatter::JSON;
+pvd::PVStructure::Formatter::format_t outmode = pvd::PVStructure::Formatter::NT;
+// outmode = pvd::PVStructure::Formatter::Raw;
+// outmode = pvd::PVStructure::Formatter::NT;
+// outmode = pvd::PVStructure::Formatter::JSON;
 int	verbosity	= 0;
 std::string request("");
 std::string defaultProvider("pva");
@@ -173,11 +175,11 @@ struct WorkQueue : public epicsThreadRunable
 	epicsMutex		mutex;
 	queue_t			queue;
 	bool			running;
-	epics::pvData::Thread		worker;
+	pvd::Thread		worker;
 
 	WorkQueue()
 		:running(true)
-		,worker(epics::pvData::Thread::Config()
+		,worker(pvd::Thread::Config()
 				.name("pvCapture handler")
 				.autostart(true)
 				.run(this))
@@ -242,7 +244,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 {
 	POINTER_DEFINITIONS(MonTracker);
 
-	MonTracker(WorkQueue& monwork, pvac::ClientChannel& channel, const epics::pvData::PVStructurePtr& pvRequest, const char * testDirPath, bool fShow)
+	MonTracker(WorkQueue& monwork, pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, const char * testDirPath, bool fShow)
 		:monwork(monwork)
 		,m_QueueSizeMax( 262144	)
 		,valid()
@@ -267,7 +269,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 	size_t					m_QueueSizeMax;
 	std::deque<t_TsReal>	m_ValueQueue;
 
-	epics::pvData::BitSet valid; // only access for process()
+	pvd::BitSet valid; // only access for process()
 	bool	fShow;
 	std::string		m_testDirPath;
 
@@ -315,47 +317,59 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 		//	epics::pvAccess::MonitorElement	&	element(*it);
 		//epics::pvAccess::Monitor::shared_pointer	pmon(&mon.root);
 		//epics::pvAccess::MonitorElement::Ref		element(pmon);
-		std::tr1::shared_ptr<const epics::pvData::PVStructure>	pvStruct = mon.root;
+		std::tr1::shared_ptr<const pvd::PVStructure>	pvStruct = mon.root;
 		//if ( element )
 		if ( pvStruct )
 		{
 			// mon.name() should be pvName
 			// To see text representation
-			// epics::pvData::PVStructure::Formatter	fmt( mon.root->stream().format(outmode) );
+			// pvd::PVStructure::Formatter	fmt( mon.root->stream().format(outmode) );
 			// fmt.show(mon.changed); // highlight none
 			// std::cout << fmt << endl;
 			// or to fetch just the value field (see pvDataCPP pvData.h)
-			// epics::pvData::PVField::const_shared_pointer valfld(pvStruct->getSubField("value"));
+			// pvd::PVField::const_shared_pointer valfld(pvStruct->getSubField("value"));
 			// if(!valfld)
 			//     valfld = pvStruct.value;
 			// std::cout << *valfld
 			// const PVFieldPtrArray & pvFields = pvStruct->getPVFields();
-			// pvStruct->getSubField<epics::pvData::PVDouble>("value")
-			// pvStruct->getSubField<epics::pvData::PVInt>("value")
-			// pvStruct->getSubFieldT<epics::pvData::PVULong>("value")
-			// pvStruct->getStructure()
+			// pvStruct->getSubField<pvd::PVDouble>("value")
+			// pvStruct->getSubField<pvd::PVInt>("value")
+			// pvStruct->getSubFieldT<pvd::PVULong>("value")
+			// StructureConstPtr	structure = pvStruct->getStructure();
 			// cout << ScalarTypeFunc::name(pPVScalarValue->typeCode);
 			// cout << ScalarTypeFunc::name(PVT::typeCode);
 			// template<> const ScalarType PVDouble::typeCode = pvDouble;
 			try
 			{
-				std::tr1::shared_ptr<const epics::pvData::PVDouble>	pValue	= pvStruct->getSubField<epics::pvData::PVDouble>("value");
+				std::tr1::shared_ptr<const pvd::PVDouble>	pValue	= pvStruct->getSubField<pvd::PVDouble>("value");
 				double			value			= FP_NAN;
 				if ( pValue )
 					value = pValue->getAs<double>();
-				epicsUInt32		secPastEpoch	= 0;
-				epicsUInt32		nsec			= 0;
 
-				std::tr1::shared_ptr<const epics::pvData::TimeStamp>	pTs		= pvStruct->getSubField<epics::pvData::TimeStamp>("timeStamp");
-				if ( pTs )
+				epicsUInt32		secPastEpoch	= 1;
+				epicsUInt32		nsec			= 2;
+
+				std::tr1::shared_ptr<const pvd::PVScalar>	pScalarSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.secondsPastEpoch");
+				if ( pScalarSec )
 				{
-					secPastEpoch	= pTs->getSecondsPastEpoch();
-					nsec			= pTs->getNanoseconds();
+					secPastEpoch	= pScalarSec->getAs<pvd::uint32>();
 				}
+				//secPastEpoch = pvStruct->
+				std::tr1::shared_ptr<const pvd::PVScalar>	pScalarNSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.nanoseconds");
+				if ( pScalarNSec )
+				{
+					nsec	= pScalarNSec->getAs<pvd::uint32>();
+				}
+				//std::tr1::shared_ptr<const pvd::TimeStamp>	pTs		= pvStruct->getSubField<pvd::TimeStamp>("timeStamp");
+				//if ( pTs )
+				//{
+				//	secPastEpoch	= pTs->getSecondsPastEpoch();
+				//	nsec			= pTs->getNanoseconds();
+				//}
 				epicsTimeStamp	timeStamp;
 				timeStamp.secPastEpoch = secPastEpoch;
 				timeStamp.nsec = nsec;
-				//epics::pvData::TimeStamp	timeStamp( secPastEpoch, nsec );
+				//pvd::TimeStamp	timeStamp( secPastEpoch, nsec );
 				t_TsReal	tsValue( timeStamp, value );
 
 				epicsGuard<epicsMutex> G(queueLock);
@@ -404,7 +418,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 				capture( evt );
 				if ( fShow )
 				{
-					epics::pvData::PVStructure::Formatter fmt(mon.root->stream()
+					pvd::PVStructure::Formatter fmt(mon.root->stream()
 													.format(outmode));
 
 					if(verbosity>=3)
@@ -484,14 +498,14 @@ int MAIN (int argc, char *argv[])
 				break;
 			case 'M':
 				if(strcmp(optarg, "raw")==0) {
-					outmode = epics::pvData::PVStructure::Formatter::Raw;
+					outmode = pvd::PVStructure::Formatter::Raw;
 				} else if(strcmp(optarg, "nt")==0) {
-					outmode = epics::pvData::PVStructure::Formatter::NT;
+					outmode = pvd::PVStructure::Formatter::NT;
 				} else if(strcmp(optarg, "json")==0) {
-					outmode = epics::pvData::PVStructure::Formatter::JSON;
+					outmode = pvd::PVStructure::Formatter::JSON;
 				} else {
 					fprintf(stderr, "Unknown output mode '%s'\n", optarg);
-					outmode = epics::pvData::PVStructure::Formatter::Raw;
+					outmode = pvd::PVStructure::Formatter::Raw;
 				}
 				break;
 			case 'w':				/* Set PVA timeout value */
@@ -549,12 +563,12 @@ int MAIN (int argc, char *argv[])
 		if(monitor)
 			timeout = -1;
 
-		if(verbosity>0 && outmode==epics::pvData::PVStructure::Formatter::NT)
-			outmode = epics::pvData::PVStructure::Formatter::Raw;
+		if(verbosity>0 && outmode==pvd::PVStructure::Formatter::NT)
+			outmode = pvd::PVStructure::Formatter::Raw;
 
-		epics::pvData::PVStructure::shared_pointer pvRequest;
+		pvd::PVStructure::shared_pointer pvRequest;
 		try {
-			pvRequest = epics::pvData::createRequest(request);
+			pvRequest = pvd::createRequest(request);
 		} catch(std::exception& e){
 			fprintf(stderr, "failed to parse request string: %s\n", e.what());
 			return 1;
