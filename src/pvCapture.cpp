@@ -14,6 +14,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <sys/stat.h>
 
 #include <epicsStdlib.h>
 #include <epicsGetopt.h>
@@ -37,6 +38,7 @@
 
 //#include "pvutils.h"
 
+#define USE_SIGNAL
 #ifndef EXECNAME
 #define EXECNAME "pvCapture"
 #endif
@@ -240,14 +242,18 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 {
 	POINTER_DEFINITIONS(MonTracker);
 
-	MonTracker(WorkQueue& monwork, pvac::ClientChannel& channel, const epics::pvData::PVStructurePtr& pvRequest, bool fShow)
+	MonTracker(WorkQueue& monwork, pvac::ClientChannel& channel, const epics::pvData::PVStructurePtr& pvRequest, const char * testDirPath, bool fShow)
 		:monwork(monwork)
 		,m_QueueSizeMax( 262144	)
 		,valid()
 		,fShow(fShow)
-		,mon(channel.monitor(this, pvRequest))
+		,m_testDirPath(testDirPath)
+		,mon(channel.monitor(this, pvRequest)	)
 	{}
-	virtual ~MonTracker() {mon.cancel();}
+	virtual ~MonTracker()
+	{
+		mon.cancel();
+	}
 
     epicsMutex		queueLock;
 	WorkQueue	&	monwork;
@@ -263,6 +269,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 
 	epics::pvData::BitSet valid; // only access for process()
 	bool	fShow;
+	std::string		m_testDirPath;
 
 	pvac::Monitor mon; // must be last data member
 
@@ -276,6 +283,28 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 		// running on internal provider worker thread
 		// minimize work here.
 		monwork.push(shared_from_this(), evt);
+	}
+
+	/// Save the timestamped values on the queue to a file
+	void saveValues( )
+	{
+		if ( m_ValueQueue.size() == 0 )
+			return;
+
+		std::string		saveFilePath( m_testDirPath );
+		saveFilePath += "/";
+		saveFilePath += mon.name();
+		// std::cout << "Creating test dir: " << m_testDirPath << std::endl;
+		mkdir( m_testDirPath.c_str(), ACCESSPERMS );
+
+		std::cout << "Writing " << m_ValueQueue.size() << " values to test file: " << saveFilePath << std::endl;
+		std::ofstream	fout( saveFilePath.c_str() );
+		fout << "[" << std::endl;
+		for ( std::deque<t_TsReal>::iterator it = m_ValueQueue.begin(); it != m_ValueQueue.end(); ++it )
+		{
+			fout << "    [ [ " << it->ts.secPastEpoch << ", " << it->ts.nsec << "], " << it->val << " ]," << std::endl;
+		}
+		fout << "]" << std::endl;
 	}
 
 	/// capture is called for each pvAccess MonitorEvent::Data on the WorkQueue
@@ -296,18 +325,20 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 			// fmt.show(mon.changed); // highlight none
 			// std::cout << fmt << endl;
 			// or to fetch just the value field (see pvDataCPP pvData.h)
-			// epics::pvData::PVField::const_shared_pointer valfld(element->pvStructurePtr->getSubField("value"));
+			// epics::pvData::PVField::const_shared_pointer valfld(pvStruct->getSubField("value"));
 			// if(!valfld)
-			//     valfld = element->pvStructurePtr.value;
+			//     valfld = pvStruct.value;
 			// std::cout << *valfld
-			// element->pvStructurePtr->getPVFields()
-			// element->pvStructurePtr->getSubField<epics::pvData::PVDouble>("value")
-			// element->pvStructurePtr->getSubField<epics::pvData::PVInt>("value")
-			// element->pvStructurePtr->getSubFieldT<epics::pvData::PVULong>("value")
-			// element->pvStructurePtr->getStructure()
+			// const PVFieldPtrArray & pvFields = pvStruct->getPVFields();
+			// pvStruct->getSubField<epics::pvData::PVDouble>("value")
+			// pvStruct->getSubField<epics::pvData::PVInt>("value")
+			// pvStruct->getSubFieldT<epics::pvData::PVULong>("value")
+			// pvStruct->getStructure()
+			// cout << ScalarTypeFunc::name(pPVScalarValue->typeCode);
+			// cout << ScalarTypeFunc::name(PVT::typeCode);
+			// template<> const ScalarType PVDouble::typeCode = pvDouble;
 			try
 			{
-				// std::tr1::shared_ptr<epics::pvData::PVDouble>	pValue	= element->pvStructurePtr->getSubField<epics::pvData::PVDouble>("value");
 				std::tr1::shared_ptr<const epics::pvData::PVDouble>	pValue	= pvStruct->getSubField<epics::pvData::PVDouble>("value");
 				double			value			= FP_NAN;
 				if ( pValue )
@@ -315,7 +346,6 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 				epicsUInt32		secPastEpoch	= 0;
 				epicsUInt32		nsec			= 0;
 
-				//std::tr1::shared_ptr<epics::pvData::TimeStamp>	pTs		= element->pvStructurePtr->getSubField<epics::pvData::TimeStamp>("timeStamp");
 				std::tr1::shared_ptr<const epics::pvData::TimeStamp>	pTs		= pvStruct->getSubField<epics::pvData::TimeStamp>("timeStamp");
 				if ( pTs )
 				{
@@ -335,7 +365,10 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 				}
 				// m_ValueQueue.emplace_back( tsValue );
 				m_ValueQueue.push_back( tsValue );
-				// typedef	struct _TtsReal { epicsTimeStamp ts, double	val; }	t_TsReal;
+			}
+			catch(std::runtime_error& e)
+			{
+				std::cout << "Bad Field Type in capture handler : " << e.what() << "\n";
 			}
 			catch(std::exception& e)
 			{
@@ -347,8 +380,10 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 	/// process is called for each pvAccess event on the WorkQueue
 	virtual void process(const pvac::MonitorEvent& evt) OVERRIDE FINAL
 	{
+		unsigned n;
 		// running on our worker thread
-		switch(evt.event) {
+		switch(evt.event)
+		{
 		case pvac::MonitorEvent::Fail:
 			std::cerr << std::setw(pvnamewidth) << std::left << mon.name() << " Error " << evt.message << "\n";
 			haderror = 1;
@@ -361,9 +396,8 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 			valid.clear();
 			break;
 		case pvac::MonitorEvent::Data:
-		{
-			unsigned n;
-			for(n=0; n<2 && mon.poll(); n++) {
+			for(n=0; n<2 && mon.poll(); n++)
+			{
 				valid |= mon.changed;
 
 				// Capture the new value
@@ -383,16 +417,20 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 					std::cout << std::setw(pvnamewidth) << std::left << mon.name() << ' ' << fmt;
 				}
 			}
-			if(n==2) {
+			if(n==2)
+			{
 				// too many updates, re-queue to balance with others
 				monwork.push(shared_from_this(), evt);
-			} else if(n==0) {
+			}
+			else if(n==0)
+			{
 				LOG(epics::pvAccess::logLevelDebug, "%s Spurious Data event on channel", mon.name().c_str());
-			} else {
+			}
+			else
+			{
 				if(mon.complete())
 					done();
 			}
-		}
 			break;
 		}
 		std::cout.flush();
@@ -413,10 +451,11 @@ int MAIN (int argc, char *argv[])
 		bool fShow		= false;
 
 		epics::RefMonitor refmon;
+		std::string		testDirPath( "/tmp/pvCaptureTest1" );
 
 		// ================ Parse Arguments
 
-		while ((opt = getopt(argc, argv, ":hvVSRM:r:w:tmp:qdcF:f:ni")) != -1) {
+		while ((opt = getopt(argc, argv, ":hvVSRD:M:r:w:tmp:qdcF:f:ni")) != -1) {
 			switch (opt) {
 			case 'h':				/* Print usage */
 				usage();
@@ -439,6 +478,9 @@ int MAIN (int argc, char *argv[])
 				break;
 			case 'R':
 				refmon.start(5.0);
+				break;
+			case 'D':
+				testDirPath = optarg;
 				break;
 			case 'M':
 				if(strcmp(optarg, "raw")==0) {
@@ -533,7 +575,7 @@ int MAIN (int argc, char *argv[])
 		{
 			pvac::ClientProvider provider(defaultProvider);
 
-			std::vector<std::tr1::shared_ptr<Tracker> > tracked;
+			std::vector<std::tr1::shared_ptr<MonTracker> > tracked;
 
 			epics::auto_ptr<WorkQueue> Q;
 			Q.reset(new WorkQueue);
@@ -542,7 +584,7 @@ int MAIN (int argc, char *argv[])
 			{
 				pvac::ClientChannel chan(provider.connect(argv[i]));
 
-				std::tr1::shared_ptr<MonTracker> mon(new MonTracker(*Q, chan, pvRequest, fShow));
+				std::tr1::shared_ptr<MonTracker> mon(new MonTracker(*Q, chan, pvRequest, testDirPath.c_str(), fShow));
 
 				tracked.push_back(mon);
 			}
@@ -560,24 +602,31 @@ int MAIN (int argc, char *argv[])
 				{
 					epicsGuardRelease<epicsMutex> U(G);
 					if(timeout<=0)
+					{
 						Tracker::doneEvt.wait();
+					}
 					else if(!Tracker::doneEvt.wait(timeout))
 					{
 						haderror = 1;
-						std::cerr << "Timeout\n";
+						std::cerr << "Timeout" << std::endl;
 						break;
 					}
 				}
 			}
-		}
 
-		if(refmon.running())
-		{
-			refmon.stop();
-			// show final counts
-			refmon.current();
-		}
+			std::cout << std::endl;
+			if(refmon.running())
+			{
+				refmon.stop();
+				// show final counts
+				refmon.current();
+			}
+			for ( std::vector<std::tr1::shared_ptr<MonTracker> >::iterator it = tracked.begin(); it != tracked.end(); ++it )
+			{
+				(*it)->saveValues();
+			}
 
+		}
 		// ========================== All done now
 
 		if(debugFlag)
