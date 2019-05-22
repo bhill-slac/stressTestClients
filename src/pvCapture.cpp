@@ -21,7 +21,7 @@
 #include <epicsExit.h>
 #include <epicsGuard.h>
 #include <epicsTime.h>
-#include <epicsTypes.h>
+#include <alarm.h>
 
 #include <pv/pvData.h>
 #include <pv/logger.h>
@@ -35,8 +35,6 @@
 #include <pv/caProvider.h>
 #include <pv/logger.h>
 #include <pva/client.h>
-
-//#include "pvutils.h"
 
 #define USE_SIGNAL
 #ifndef EXECNAME
@@ -264,6 +262,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 	{
 		epicsTimeStamp	ts;
 		double			val;
+		_tsReal( ) : ts(), val() { val = NAN; };
 		_tsReal( const epicsTimeStamp & newTs, double newVal ) : ts(newTs), val(newVal){ };
 	}	t_TsReal;
 	size_t					m_QueueSizeMax;
@@ -279,6 +278,12 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 	/// The ClientChannel defines: virtual void monitorEvent() = 0;
 	virtual void monitorEvent(const pvac::MonitorEvent& evt) OVERRIDE FINAL
 	{
+	// TODO: Getting this error msg if I create multiple MonTracker objects for the same PV name
+	// Unhandled exception following exception in ClientChannel::MonitorCallback::monitorEvent(): epicsMutex::invalidMutex()
+	// or
+	// Unhandled exception in ClientChannel::MonitorCallback::monitorEvent(): tr1::bad_weak_ptr
+	// Unhandled exception in ClientChannel::MonitorCallback::monitorEvent(): epicsMutex::invalidMutex()
+	// Unhandled exception in ClientChannel::MonitorCallback::monitorEvent(): epicsMutex::invalidMutex()
 		// shared_from_this() will fail as Cancel is delivered in our dtor.
 		if(evt.event==pvac::MonitorEvent::Cancel) return;
 
@@ -319,75 +324,109 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 		//epics::pvAccess::MonitorElement::Ref		element(pmon);
 		std::tr1::shared_ptr<const pvd::PVStructure>	pvStruct = mon.root;
 		//if ( element )
-		if ( pvStruct )
+		assert( pvStruct != 0 );
+
+		// mon.name() should be pvName
+		// To see text representation
+		// pvd::PVStructure::Formatter	fmt( mon.root->stream().format(outmode) );
+		// fmt.show(mon.changed); // highlight none
+		// std::cout << fmt << endl;
+		// or to fetch just the value field (see pvDataCPP pvData.h)
+		// pvd::PVField::const_shared_pointer valfld(pvStruct->getSubField("value"));
+		// if(!valfld)
+		//     valfld = pvStruct.value;
+		// std::cout << *valfld
+		// const PVFieldPtrArray & pvFields = pvStruct->getPVFields();
+		// pvStruct->getSubField<pvd::PVDouble>("value")
+		// pvStruct->getSubField<pvd::PVInt>("value")
+		// pvStruct->getSubFieldT<pvd::PVULong>("value")
+		// StructureConstPtr	structure = pvStruct->getStructure();
+		// cout << ScalarTypeFunc::name(pPVScalarValue->typeCode);
+		// cout << ScalarTypeFunc::name(PVT::typeCode);
+		// template<> const ScalarType PVDouble::typeCode = pvDouble;
+		try
 		{
-			// mon.name() should be pvName
-			// To see text representation
-			// pvd::PVStructure::Formatter	fmt( mon.root->stream().format(outmode) );
-			// fmt.show(mon.changed); // highlight none
-			// std::cout << fmt << endl;
-			// or to fetch just the value field (see pvDataCPP pvData.h)
-			// pvd::PVField::const_shared_pointer valfld(pvStruct->getSubField("value"));
-			// if(!valfld)
-			//     valfld = pvStruct.value;
-			// std::cout << *valfld
-			// const PVFieldPtrArray & pvFields = pvStruct->getPVFields();
-			// pvStruct->getSubField<pvd::PVDouble>("value")
-			// pvStruct->getSubField<pvd::PVInt>("value")
-			// pvStruct->getSubFieldT<pvd::PVULong>("value")
-			// StructureConstPtr	structure = pvStruct->getStructure();
-			// cout << ScalarTypeFunc::name(pPVScalarValue->typeCode);
-			// cout << ScalarTypeFunc::name(PVT::typeCode);
-			// template<> const ScalarType PVDouble::typeCode = pvDouble;
-			try
+			std::tr1::shared_ptr<const pvd::PVInt>	pStatus = pvStruct->getSubField<pvd::PVInt>("alarm.status");
+			std::tr1::shared_ptr<const pvd::PVInt>	pSeverity = pvStruct->getSubField<pvd::PVInt>("alarm.severity");
+			// Only capture values w/ alarm.status NO_ALARM
+			if ( pStatus == NULL || pStatus->get() != NO_ALARM )
+				return;
+			if ( pSeverity == NULL || pSeverity->get() != 0 )
+				return;
+			std::tr1::shared_ptr<const pvd::PVDouble>	pValue	= pvStruct->getSubField<pvd::PVDouble>("value");
+			double			value			= NAN;
+			if ( pValue )
 			{
-				std::tr1::shared_ptr<const pvd::PVDouble>	pValue	= pvStruct->getSubField<pvd::PVDouble>("value");
-				double			value			= FP_NAN;
-				if ( pValue )
-					value = pValue->getAs<double>();
+				value = pValue->getAs<double>();
+			}
 
-				epicsUInt32		secPastEpoch	= 1;
-				epicsUInt32		nsec			= 2;
+			epicsUInt32		secPastEpoch	= 1;
+			epicsUInt32		nsec			= 2;
+			std::tr1::shared_ptr<const pvd::PVScalar>	pScalarSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.secondsPastEpoch");
+			if ( pScalarSec )
+			{
+				secPastEpoch	= pScalarSec->getAs<pvd::uint32>();
+			}
+			std::tr1::shared_ptr<const pvd::PVScalar>	pScalarNSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.nanoseconds");
+			if ( pScalarNSec )
+			{
+				nsec	= pScalarNSec->getAs<pvd::uint32>();
+			}
+			epicsTimeStamp	timeStamp;
+			timeStamp.secPastEpoch = secPastEpoch;
+			timeStamp.nsec = nsec;
+			//pvd::TimeStamp	timeStamp( secPastEpoch, nsec );
+			t_TsReal	tsValue( timeStamp, value );
+			t_TsReal	tsPrior;
+			assert( isnan(tsPrior.val) );
 
-				std::tr1::shared_ptr<const pvd::PVScalar>	pScalarSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.secondsPastEpoch");
-				if ( pScalarSec )
-				{
-					secPastEpoch	= pScalarSec->getAs<pvd::uint32>();
-				}
-				//secPastEpoch = pvStruct->
-				std::tr1::shared_ptr<const pvd::PVScalar>	pScalarNSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.nanoseconds");
-				if ( pScalarNSec )
-				{
-					nsec	= pScalarNSec->getAs<pvd::uint32>();
-				}
-				//std::tr1::shared_ptr<const pvd::TimeStamp>	pTs		= pvStruct->getSubField<pvd::TimeStamp>("timeStamp");
-				//if ( pTs )
-				//{
-				//	secPastEpoch	= pTs->getSecondsPastEpoch();
-				//	nsec			= pTs->getNanoseconds();
-				//}
-				epicsTimeStamp	timeStamp;
-				timeStamp.secPastEpoch = secPastEpoch;
-				timeStamp.nsec = nsec;
-				//pvd::TimeStamp	timeStamp( secPastEpoch, nsec );
-				t_TsReal	tsValue( timeStamp, value );
-
-				epicsGuard<epicsMutex> G(queueLock);
-				if ( m_ValueQueue.size() >= m_QueueSizeMax )
-				{
+			//if ( pStatus == NULL || pStatus->get() != NO_ALARM )
+			//	return;
+			{	// Keep guard while accessing m_ValueQueue
+			epicsGuard<epicsMutex> G(queueLock);
+			if ( !m_ValueQueue.empty() )
+				tsPrior = m_ValueQueue.back();
+			if ( ! isnan(tsValue.val) )
+			{
+				if( m_ValueQueue.size() >= m_QueueSizeMax )
 					m_ValueQueue.pop_front();
-				}
-				// m_ValueQueue.emplace_back( tsValue );
 				m_ValueQueue.push_back( tsValue );
 			}
-			catch(std::runtime_error& e)
-			{
-				std::cout << "Bad Field Type in capture handler : " << e.what() << "\n";
 			}
-			catch(std::exception& e)
+
+			// std::cout << "tsPrior: val=" << tsPrior.val << ", ts=[" << tsPrior.ts.secPastEpoch << ", " << tsPrior.ts.nsec << "]" << "\n";
+			// std::cout << "tsValue:      val=" << tsValue.val << ", ts=[" << tsValue.ts.secPastEpoch << ", " << tsValue.ts.nsec << "]" << "\n";
+			// Check for missed counter update
+			if ( ! isnan(tsValue.val) && tsValue.val != 0 && ! isnan(tsPrior.val) )
 			{
-				std::cout << "Error in capture handler : " << e.what() << "\n";
+				if ( tsPrior.val + 1.0 != tsValue.val )
+				{
+					if ( debugFlag )
+					{
+						std::cout	<< "tsPrior:"
+							<< " val="	<< tsPrior.val	
+							<< ", ts=[" << tsPrior.ts.secPastEpoch << ", " << tsPrior.ts.nsec << "]"
+							<< ", SEVR=" << *pSeverity
+							<< ", STAT=" << *pStatus << "\n";
+						std::cout	<< "tsValue:"
+							<< " val="	<< tsValue.val	
+							<< ", ts=[" << tsValue.ts.secPastEpoch << ", " << tsValue.ts.nsec << "]"
+							<< ", SEVR=" << *pSeverity
+							<< ", STAT=" << *pStatus << "\n";
+					}
+					long int	nMissed = lround( tsValue.val - tsPrior.val - 1 );
+					LOG( epics::pvAccess::logLevelError, "%s: Missed %ld, prior %ld, cur %ld", mon.name().c_str(),
+						nMissed, static_cast<long int>(tsPrior.val), static_cast<long int>(tsValue.val) );
+				}
 			}
+		}
+		catch(std::runtime_error& e)
+		{
+			std::cout << "Bad Field Type in capture handler : " << e.what() << "\n";
+		}
+		catch(std::exception& e)
+		{
+			std::cout << "Error in capture handler : " << e.what() << "\n";
 		}
 	}
 
@@ -463,6 +502,8 @@ int MAIN (int argc, char *argv[])
 		int opt;					/* getopt() current option */
 		bool monitor	= true;
 		bool fShow		= false;
+		std::string			pvFilename("");
+		std::vector<std::string>	pvList;
 
 		epics::RefMonitor refmon;
 		std::string		testDirPath( "/tmp/pvCaptureTest1" );
@@ -531,8 +572,8 @@ int MAIN (int argc, char *argv[])
 				// deprecate
 				break;
 			case 'f':				/* Use input stream as input */
-				fprintf(stderr, "Unsupported option -f\n");
-				return 1;
+				pvFilename = optarg;
+				break;
 			case 'm':				/* Monitor mode */
 				monitor = true;
 				break;
@@ -574,9 +615,34 @@ int MAIN (int argc, char *argv[])
 			return 1;
 		}
 
+		if ( pvFilename.size() > 0 )
+		{
+			try
+			{
+				std::ifstream	fin( pvFilename.c_str() );
+				std::string		line;
+				if ( !fin.is_open() )
+					std::cout << "Unable to open " << pvFilename << std::endl;
+				else
+				{
+					while ( getline( fin, line ) )
+					{
+						pvnamewidth = std::max(pvnamewidth, line.size());
+						pvList.push_back( line );
+					}
+					fin.close();
+				}
+			}
+			catch( std::exception & e )
+			{
+				std::cerr << "Error: " << e.what() << "\n";
+			}
+		}
+
 		for(int i = optind; i < argc; i++)
 		{
 			pvnamewidth = std::max(pvnamewidth, strlen(argv[i]));
+			pvList.push_back( argv[i] );
 		}
 
 	// Everything up to here is just related to handling cmd line arguments
@@ -594,9 +660,9 @@ int MAIN (int argc, char *argv[])
 			epics::auto_ptr<WorkQueue> Q;
 			Q.reset(new WorkQueue);
 
-			for(int i = optind; i < argc; i++)
+			for ( std::vector<std::string>::const_iterator it = pvList.begin(); it != pvList.end(); ++it )
 			{
-				pvac::ClientChannel chan(provider.connect(argv[i]));
+				pvac::ClientChannel chan( provider.connect(*it) );
 
 				std::tr1::shared_ptr<MonTracker> mon(new MonTracker(*Q, chan, pvRequest, testDirPath.c_str(), fShow));
 
