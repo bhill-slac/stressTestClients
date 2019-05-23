@@ -123,7 +123,7 @@ int haderror;
 
 void usage (void)
 {
-	fprintf( stderr, "\nUsage: " EXECNAME " [options] <PV:Name>...\n"
+	fprintf( stdout, "\nUsage: " EXECNAME " [options] <PV:Name>...\n"
 			"\n"
 			"options:\n" \
 			"  -h: Help: Print this message\n" \
@@ -252,7 +252,12 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 	{}
 	virtual ~MonTracker()
 	{
+		try {
 		mon.cancel();
+		}
+		catch(std::exception& e){
+			std::cout << "Error in ~MonTracker: " << e.what() << "\n";
+		}
 	}
 
     epicsMutex		queueLock;
@@ -278,6 +283,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 	/// The ClientChannel defines: virtual void monitorEvent() = 0;
 	virtual void monitorEvent(const pvac::MonitorEvent& evt) OVERRIDE FINAL
 	{
+	try {
 	// TODO: Getting this error msg if I create multiple MonTracker objects for the same PV name
 	// Unhandled exception following exception in ClientChannel::MonitorCallback::monitorEvent(): epicsMutex::invalidMutex()
 	// or
@@ -290,6 +296,10 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 		// running on internal provider worker thread
 		// minimize work here.
 		monwork.push(shared_from_this(), evt);
+	}
+	catch(std::exception& e){
+		std::cout << "Error in monitorEvent : " << e.what() << "\n";
+	}
 	}
 
 	/// Save the timestamped values on the queue to a file
@@ -362,12 +372,12 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 
 			epicsUInt32		secPastEpoch	= 1;
 			epicsUInt32		nsec			= 2;
-			std::tr1::shared_ptr<const pvd::PVScalar>	pScalarSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.secondsPastEpoch");
+			std::tr1::shared_ptr<const pvd::PVScalar>	pScalarSec	= pvStruct->getSubField<pvd::PVScalar>("timeStamp.secondsPastEpoch");
 			if ( pScalarSec )
 			{
 				secPastEpoch	= pScalarSec->getAs<pvd::uint32>();
 			}
-			std::tr1::shared_ptr<const pvd::PVScalar>	pScalarNSec	= pvStruct->getSubFieldT<pvd::PVScalar>("timeStamp.nanoseconds");
+			std::tr1::shared_ptr<const pvd::PVScalar>	pScalarNSec	= pvStruct->getSubField<pvd::PVScalar>("timeStamp.nanoseconds");
 			if ( pScalarNSec )
 			{
 				nsec	= pScalarNSec->getAs<pvd::uint32>();
@@ -433,6 +443,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 	/// process is called for each pvAccess event on the WorkQueue
 	virtual void process(const pvac::MonitorEvent& evt) OVERRIDE FINAL
 	{
+	try {
 		unsigned n;
 		// running on our worker thread
 		switch(evt.event)
@@ -487,6 +498,11 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 			break;
 		}
 		std::cout.flush();
+	}
+		catch(std::exception& e)
+		{
+			std::cout << "Error in capture handler : " << e.what() << "\n";
+		}
 	}
 };
 
