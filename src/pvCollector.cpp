@@ -1,4 +1,7 @@
+#include <iomanip>
+#include <iostream>
 #include <list>
+#include <map>
 #include <algorithm>
 
 #include <epicsMath.h>
@@ -8,6 +11,7 @@
 #include "pvCollector.h"
 
 #include <epicsExport.h>
+#include <epicsGuard.h>
 
 namespace pvd = epics::pvData;
 
@@ -16,65 +20,52 @@ static double maxEventAge = 2.5;
 
 int collectorDebug;
 
-size_t pvCollector<double>::c_num_instances	= 0;
-size_t pvCollector<double>::c_max_events	= 360000;	// 1 hour at 100hz
+template<> size_t		pvCollector<double>::c_num_instances	= 0;
+template<> size_t		pvCollector<double>::c_max_events		= 360000;	// 1 hour at 100hz
+template<> epicsMutex	pvCollector<double>::c_mutex;
+template<> std::map< std::string, pvCollector<double> * >	pvCollector<double>::c_instances;
 
-void	pvCollector::setMaxEvents( size_t maxEvents )
-{
-	c_max_events = maxEvents;
-}
-
-pvCollector::PVCollector( const std::string pvName, unsigned int prio)
-    :	m_pvName(	pvName	)
-    ,	m_events()
-{
-    REFTRACE_INCREMENT(num_instances);
-
-    m_events.resize(max_events);
-}
-
-pvCollector::~PVCollector()
-{
-    REFTRACE_DECREMENT(c_num_instances);
-    close();
-}
-
-
+#if 0
 void pvCollector::close()
 {
     {
-        Guard G(m_mutex);
+        epicsGuard<epicsMutex> G(m_mutex);
         run = false;
     }
     wakeup.signal();
     processor.exitWait();
 }
+#endif
 
+#if 0
 template <typename T>
 void pvCollector::saveValue( epicsUInt64 tsKey, T value )
 {
 	try
 	{
-		Guard	guard( m_mutex );
-		while ( m_events<T>.size() >= c_maxEvents )
+		epicsGuard<epicsMutex>	guard( m_mutex );
+		while ( m_events.size() >= c_max_events )
 		{
-			m_events<T>.erase( m_events<T>.begin() );
+			m_events.erase( m_events.begin() );
 		}
-		(void) m_events<T>.insert( m_events<T>.end(), std::make_pair( tsKey, value ) );
+		(void) m_events.insert( m_events.end(), std::make_pair( tsKey, value ) );
 	}
 	catch( std::exception & err )
 	{
 		std::cerr << "pvCollector::saveValue exception caught: " << err.what() << std::endl;
 	}
 }
+#endif
 
+#if 0
 template <typename T>
-void PVColector::writeValues( std::ostream & output )
+void pvCollector::writeValues( std::ostream & output )
 {
-	Guard	guard( m_mutex );
+	epicsGuard<epicsMutex>	guard( m_mutex );
+	std::map< epicsUInt64, double >::iterator it2 = m_events.begin();
 
 	output << "[" << std::endl;
-	for ( std::map< epicsUInt64, T >::iterator it = m_events.begin(); it != m_events.end(); ++it )
+	for ( std::map< epicsUInt64, double >::iterator it = m_events.begin(); it != m_events.end(); ++it )
 	{
 		epicsUInt64		key		= it->first;
 		epicsUInt32		sec		= key >> 32;
@@ -82,11 +73,23 @@ void PVColector::writeValues( std::ostream & output )
 		output	<<	std::fixed << std::setw(17)
 				<< "    [	[ "	<< sec << ", " << nsec << "], " << it->second << " ]," << std::endl;
 	}
-	fout << "]" << std::endl;
+	output << "]" << std::endl;
+}
+#endif
+
+template<> pvCollector<double> * pvCollector<double>::getPVCollector( const std::string & pvName )
+{
+	epicsGuard<epicsMutex> G(c_mutex);
+	pvCollector<double>	*	pCollector	= NULL;
+	std::map< std::string, pvCollector<double> * >::iterator	it;
+	it = c_instances.find( pvName );
+	if ( it != c_instances.end() )
+		pCollector	= it->second;
+	return pCollector;
 }
 
 extern "C" {
-epicsExportAddress(double, maxEventRate);
+//epicsExportAddress(double, maxEventRate);
 epicsExportAddress(double, maxEventAge);
-epicsExportAddress(int, pvCollectorDebug);
+//epicsExportAddress(int, pvCollectorDebug);
 }

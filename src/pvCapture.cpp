@@ -13,6 +13,7 @@
 #include <sstream>
 
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
 #include <sys/stat.h>
 
