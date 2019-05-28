@@ -136,6 +136,7 @@ void usage (void)
 			"  -q:                Quiet mode, print only error messages\n" \
 			"  -d:                Enable debug output\n"
 			"  -f <input file>:   Read pvName list from file, one line per pvName.\n"
+			"  -D <dirpath>:      Directory path where captured values are saved to <dirpath>/<pvname>.\n"
 			"  -S:                Show each PV as it's captured, same output options as pvmonitor.\n"
 			" deprecated options:\n"
 			"  -t, -i, -n, -F: ignored\n"
