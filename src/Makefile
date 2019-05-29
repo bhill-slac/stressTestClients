@@ -6,7 +6,7 @@ USR_CXXFLAGS += -O0
 
 PROD_HOST += pvCapture
 pvCapture_SRCS += pvCapture.cpp
-pvCapture_SRCS += pvCollector.cpp
+#pvCapture_SRCS += pvCollector.cpp
 
 PROD_HOST += pvGet
 pvGet_SRCS += pvGet.cpp
