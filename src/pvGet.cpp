@@ -263,28 +263,41 @@ struct WorkQueue : public epicsThreadRunable
 };
 
 // From pvAccessCPP/pvtoolsSrc/pvget.cpp
-struct Getter : public pvac::ClientChannel::GetCallback, public Tracker
+struct Getter : public pvac::ClientChannel::GetCallback,
+#ifdef GETTER_BLOCK
+				public Worker,
+#endif
+				public Tracker,
+				public std::tr1::enable_shared_from_this<Getter>
 {
     POINTER_DEFINITIONS(Getter);
 
+    WorkQueue   &   monwork;
     pvac::Operation op;
 	bool            fCapture;
 	bool            fShow;
+	double						m_Repeat;
     size_t                 	 	m_QueueSizeMax;
     std::deque<t_TsReal>   	 	m_ValueQueue;
     epicsMutex      			m_QueueLock;
 	const pvd::PVStructurePtr	m_pvStruct; 
 	//pvac::ClientChannel			m_clientChannel;
 
-    Getter(pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, bool fCapture, bool fShow)
-		:op()
+    Getter(WorkQueue& monwork, pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, bool fCapture, bool fShow, double repeat )
+		:monwork(monwork)
+		,op()
         ,fCapture(fCapture)
         ,fShow(fShow)
+		,m_Repeat( repeat )
         ,m_QueueSizeMax( 262144 )
 		,m_ValueQueue()
     {
-        op = channel.get(this, pvRequest);
 		setName( channel.name() );
+#ifdef GETTER_BLOCK
+		monwork.push( shared_from_this(), pvRequest );
+#else
+        op = channel.get(this, pvRequest);
+#endif
     }
     virtual ~Getter()
  	{
@@ -303,6 +316,77 @@ struct Getter : public pvac::ClientChannel::GetCallback, public Tracker
 		setName( channel.name() );
 		restartTracker();
 	}
+
+#ifdef GETTER_BLOCK
+    /// process is called for each item on the WorkQueue
+    virtual void process( pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest ) OVERRIDE FINAL
+    {
+    try {
+        unsigned n;
+        // running on our worker thread
+        switch(evt.event)
+        {
+        case pvac::MonitorEvent::Fail:
+            std::cerr << std::setw(pvnamewidth) << std::left << mon.name() << " Error " << evt.message << "\n";
+            haderror = 1;
+            done();
+            break;
+        case pvac::MonitorEvent::Cancel:
+            break;
+        case pvac::MonitorEvent::Disconnect:
+            std::cout << std::setw(pvnamewidth) << std::left << mon.name() << " <Disconnect>\n";
+            valid.clear();
+            break;
+        case pvac::MonitorEvent::Data:
+            for(n=0; n<2 && mon.poll(); n++)
+            {
+                valid |= mon.changed;
+
+				if ( fCapture )
+				{
+					// Capture the new value
+					capture( evt );
+				}
+
+                if ( fShow )
+                {
+                    pvd::PVStructure::Formatter fmt(mon.root->stream()
+                                                    .format(outmode));
+
+                    if(verbosity>=3)
+                        fmt.highlight(mon.changed); // show all
+                    else if(verbosity>=2)
+                        fmt.highlight(mon.changed).show(valid);
+                    else
+                        fmt.show(mon.changed); // highlight none
+
+                    std::cout << std::setw(pvnamewidth) << std::left << mon.name() << ' ' << fmt;
+                }
+            }
+            if(n==2)
+            {
+                // too many updates, re-queue to balance with others
+                monwork.push(shared_from_this(), evt);
+            }
+            else if(n==0)
+            {
+                LOG(epics::pvAccess::logLevelDebug, "%s Spurious Data event on channel", mon.name().c_str());
+            }
+            else
+            {
+                if(mon.complete())
+                    done();
+            }
+            break;
+        }
+        std::cout.flush();
+    }
+        catch(std::exception& e)
+        {
+            std::cout << "Error in capture handler : " << e.what() << "\n";
+        }
+    }
+#endif
 
     /// capture is called for each pvAccess MonitorEvent::Data
     virtual void capture(const pvac::GetEvent& evt) OVERRIDE FINAL
@@ -728,7 +812,7 @@ int MAIN (int argc, char *argv[])
         bool monitor    = false;
 #endif
         bool fShow      = false;
-        int  repeat     = -1;
+        double repeat   = -1;
         std::string         pvFilename("");
         std::vector<std::string>    pvList;
 
@@ -909,7 +993,7 @@ int MAIN (int argc, char *argv[])
 				tracked.push_back(mon);
 
 			} else { // Get
-				std::tr1::shared_ptr<Getter> get(new Getter(chan, pvRequest, capture, fShow));
+				std::tr1::shared_ptr<Getter> get( new Getter( *Q, chan, pvRequest, capture, fShow, repeat) );
 
 				tracked.push_back(get);
 			}
@@ -957,7 +1041,7 @@ int MAIN (int argc, char *argv[])
 				(*it)->restart( chan, pvRequest );
 			}
 		}
-	}   while ( repeat != -1 && !Tracker::abort );
+	}   while ( repeat >= 0 && !Tracker::abort );
 
 	for ( std::vector<std::tr1::shared_ptr<Tracker> >::iterator it = tracked.begin(); it != tracked.end(); ++it )
 	{
