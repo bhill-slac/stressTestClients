@@ -19,22 +19,28 @@ TOP=`readlink -f $(dirname ${BASH_SOURCE[0]})`
 echo PYPROCMGR = $PYPROCMGR
 echo TOP = $TOP
 
-TESTNAME=pva-ctrs0
-export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME
+TESTNAME=pva-gw-ctrs4
+export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/clients
 mkdir -p $TEST_DIR
-cat /proc/cpuinfo > $TEST_DIR/cpuinfo
-cat /proc/meminfo > $TEST_DIR/meminfo
+cat /proc/cpuinfo > $TEST_DIR/cpu.info
+cat /proc/meminfo > $TEST_DIR/mem.info
 
-export N_CLIENTS=20
 export N_SERVERS=10
+export N_CLIENTS=20
 export N_CNT_PER_SERVER=100
+
+# Testing
+#export N_SERVERS=3
+#export N_CNT_PER_SERVER=5
+#export N_CLIENTS=4
+
 export N_PVS_PER_CLIENT=$((($N_SERVERS*$N_CNT_PER_SERVER+$N_CLIENTS-1)/$N_CLIENTS))
 echo N_CLIENTS=$N_CLIENTS
 echo N_SERVERS=$N_SERVERS
 echo N_CNT_PER_SERVER=$N_CNT_PER_SERVER
 echo N_PVS_PER_CLIENT=$N_PVS_PER_CLIENT
 
-export CLIENT=pvCapture0
+export CLIENT=pvCapture
 PORT=42000
 
 P=0
@@ -57,6 +63,6 @@ for (( N = 0; N < $N_CNT_PER_SERVER ; ++N )) do
 done
 #echo $PYPROCMGR -c $N_CLIENTS ...
 cd $TOP
-$PYPROCMGR -c $N_CLIENTS -n $CLIENT -p $PORT -d 5.0 -D $TEST_DIR 'bin/$EPICS_HOST_ARCH/pvCapture -D $TEST_DIR/$CLIENT$PYPROC_ID -f $TEST_DIR/$CLIENT$PYPROC_ID/pvs.list'
+$PYPROCMGR -v -c $N_CLIENTS -n $CLIENT -p $PORT -d 5.0 -D $TEST_DIR 'bin/$EPICS_HOST_ARCH/pvCapture -D $TEST_DIR/$CLIENT$PYPROC_ID -f $TEST_DIR/$CLIENT$PYPROC_ID/pvs.list'
 
 

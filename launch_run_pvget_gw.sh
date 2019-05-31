@@ -22,20 +22,20 @@ echo TOP = $TOP
 HOSTNAME=`hostname -s`
 TESTNAME=pva-gw-ctrs4
 
-export N_CLIENTS=10
+export N_CLIENTS=1
 echo N_CLIENTS=$N_CLIENTS
 
-export CLIENT=pvget
-PORT=43000
+export CLIENT=pvget_gw
+PORT=43100
 
 export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/clients
 #export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/$CLIENT
 mkdir -p $TEST_DIR
 
-pkill -9 run_pvget.sh
-pkill -9 pvget
+#pkill -9 run_pvget.sh
+#pkill -9 pvget
 
 #echo TEST_DIR=$TEST_DIR
 #echo $PYPROCMGR -c $N_CLIENTS ...
-$PYPROCMGR -c $N_CLIENTS -n $CLIENT -p $PORT -D $TEST_DIR "$TOP/run_pvget.sh" '$TEST_DIR/$CLIENT$PYPROC_ID' 'PVA:GW:TEST:$PYPROC_ID:Rate0 PVA:GW:TEST:$PYPROC_ID:Rate1 PVA:GW:TEST:$PYPROC_ID:Rate2 PVA:GW:TEST:$PYPROC_ID:Rate3 PVA:GW:TEST:$PYPROC_ID:Rate4 PVA:GW:TEST:$PYPROC_ID:Rate5 PVA:GW:TEST:$PYPROC_ID:Rate6 PVA:GW:TEST:$PYPROC_ID:Rate7 PVA:GW:TEST:$PYPROC_ID:Rate8 PVA:GW:TEST:$PYPROC_ID:Rate9'
+$PYPROCMGR -v -c $N_CLIENTS -n $CLIENT -p $PORT -D $TEST_DIR "$TOP/run_pvget.sh" '$TEST_DIR/$CLIENT$PYPROC_ID' 'gw:stats gw:us:byhost:rx gw:us:byhost:tx gw:us:bypv:rx gw:us:bypv:tx gw:ds:byhost:rx gw:ds:byhost:tx gw:ds:bypv:rx gw:ds:bypv:tx'
 

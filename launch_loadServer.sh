@@ -21,13 +21,13 @@ TOP=`readlink -f $(dirname $LOADSERVER)/../..`
 echo TOP = $TOP
 
 HOSTNAME=`hostname -s`
-TESTNAME=pva-ctrs0
-TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME
+TESTNAME=pva-gw-ctrs4
+TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/servers
 mkdir -p $TEST_DIR
-cat /proc/cpuinfo > $TEST_DIR/cpuinfo
-cat /proc/meminfo > $TEST_DIR/meminfo
+cat /proc/cpuinfo > $TEST_DIR/cpu.info
+cat /proc/meminfo > $TEST_DIR/mem.info
 cd $TOP
-$PYPROCMGR -c 10  \
+EPICS_PVA_SERVER_PORT=5086 EPICS_PVA_BROADCAST_PORT=5086 $PYPROCMGR -c 10  \
 	-n loadServer -p 50000 \
 	-D $TEST_DIR \
 	$LOADSERVER \
