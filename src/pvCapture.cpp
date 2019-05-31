@@ -127,6 +127,7 @@ static
 void alldone(int num)
 {
     (void)num;
+	printf( "\nalldone: Received signal %d.  Sending doneEvt signal to Trackers ...\n", num );
     Tracker::abort = true;
     Tracker::doneEvt.signal();
 }
@@ -135,9 +136,10 @@ void alldone(int num)
 void Tracker::prepare()
 {
 #ifdef USE_SIGNAL
-        signal(SIGINT, alldone);
+        signal(SIGINT,  alldone);
         signal(SIGTERM, alldone);
         signal(SIGQUIT, alldone);
+//      signal(SIGKILL, alldone);
 #endif
 }
 
@@ -326,17 +328,22 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
         std::string     saveFilePath( m_testDirPath );
         saveFilePath += "/";
         saveFilePath += mon.name();
+        saveFilePath += ".pvCapture";
         // std::cout << "Creating test dir: " << m_testDirPath << std::endl;
         mkdir( m_testDirPath.c_str(), ACCESSPERMS );
 
         std::cout << "Writing " << m_ValueQueue.size() << " values to test file: " << saveFilePath << std::endl;
         std::ofstream   fout( saveFilePath.c_str() );
-        fout << "[" << std::endl;
+        fout << "[";
         for ( std::deque<t_TsReal>::iterator it = m_ValueQueue.begin(); it != m_ValueQueue.end(); ++it )
         {
-            fout << "    [ [ " << it->ts.secPastEpoch << ", " << it->ts.nsec << "], " << it->val << " ]," << std::endl;
+			if ( it == m_ValueQueue.begin() )
+        		fout << std::endl;
+			else
+        		fout << "," << std::endl;
+            fout << "    [ [ " << it->ts.secPastEpoch << ", " << it->ts.nsec << "], " << it->val << " ]";
         }
-        fout << "]" << std::endl;
+        fout << std::endl << "]" << std::endl;
     }
 
     /// capture is called for each pvAccess MonitorEvent::Data on the WorkQueue
@@ -683,6 +690,7 @@ int MAIN (int argc, char *argv[])
 
         epics::pvAccess::ca::CAClientFactory::start();
 
+        {
 		std::vector<std::tr1::shared_ptr<MonTracker> > tracked;
 		pvac::ClientProvider provider(defaultProvider);
 
@@ -739,6 +747,7 @@ int MAIN (int argc, char *argv[])
                 (*it)->saveValues();
             }
 
+        }
         }
         // ========================== All done now
 
