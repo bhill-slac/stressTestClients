@@ -20,7 +20,7 @@ TOP=`readlink -f $(dirname ${BASH_SOURCE[0]})`
 echo TOP = $TOP
 
 HOSTNAME=`hostname -s`
-TESTNAME=pva-gw-ctrs4
+TESTNAME=pva-ctrs-360
 
 export N_CLIENTS=10
 echo N_CLIENTS=$N_CLIENTS

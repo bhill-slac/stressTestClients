@@ -19,7 +19,7 @@ TOP=`readlink -f $(dirname ${BASH_SOURCE[0]})`
 echo PYPROCMGR = $PYPROCMGR
 echo TOP = $TOP
 
-TESTNAME=pva-gw-ctrs4
+TESTNAME=pva-ctrs-360
 export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/clients
 mkdir -p $TEST_DIR
 cat /proc/cpuinfo > $TEST_DIR/cpu.info

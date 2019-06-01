@@ -21,7 +21,7 @@ TOP=`readlink -f $(dirname $LOADSERVER)/../..`
 echo TOP = $TOP
 
 HOSTNAME=`hostname -s`
-TESTNAME=pva-gw-ctrs4
+TESTNAME=pva-ctrs-360
 TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/servers
 mkdir -p $TEST_DIR
 cat /proc/cpuinfo > $TEST_DIR/cpu.info
