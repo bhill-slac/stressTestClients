@@ -1,4 +1,10 @@
 #!/bin/bash
+if [ $# -lt 1 -o "$1" == "-h" ]; then
+	echo Usage: $(basename ${BASH_SOURCE[0]}) testName
+	exit 1
+fi
+TESTNAME=$1
+
 PROCSERV=`which procServ`
 if [ ! -e "$PROCSERV" ]; then
 	echo "Error: procServ not found!"
@@ -10,31 +16,70 @@ if [ ! -e "$LOADSERVER" ]; then
 	echo "Error: loadServer not found!"
 	exit 1
 fi
+LOADSERVER_BIN=`dirname $LOADSERVER`
+TOP=`readlink -f $LOADSERVER_BIN/../..`
 
 PYPROCMGR=`which pyProcMgr.py`
 if [ ! -e "$PYPROCMGR" ]; then
 	echo "Error: pyProcMgr.py not found!"
 	exit 1
 fi
-
-TOP=`readlink -f $(dirname $LOADSERVER)/../..`
-echo TOP = $TOP
-
 HOSTNAME=`hostname -s`
-TESTNAME=pva-ctrs-360
-TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/servers
+SCRIPTDIR=`dirname ${BASH_SOURCE[0]}`
+
+# Configure Test
+source $SCRIPTDIR/stressTestDefault.env
+TEST_APPTYPE=loadServer
+if [ -f $SCRIPTDIR/${TEST_APPTYPE}Default.env ]; then
+	source $SCRIPTDIR/${TEST_APPTYPE}Default.env
+fi
+if [ -f $TEST_TOP/default.env ]; then
+	source $TEST_TOP/default.env
+fi
+if [ -f $TEST_TOP/${TESTNAME}.env ]; then
+	source $TEST_TOP/${TESTNAME}.env 
+fi
+
+# Gateway port test env
+#TEST_EPICS_PVA_SERVER_PORT=5086
+#TEST_EPICS_PVA_BROADCAST_PORT=5086
+
+TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+mkdir -p $TEST_HOST_DIR
+TEST_LOG=$TEST_HOST_DIR/$TESTNAME-${TEST_APPTYPE}.log
+echo TESTNAME=$TESTNAME | tee $TEST_LOG
+echo "Launching $TEST_N_LOADSERVERS ${TEST_APPTYPE} IOCs w/ $TEST_N_COUNTERS Counters each" | tee -a $TEST_LOG
+
+echo TEST_LOADSERVER_BASEPORT=$TEST_LOADSERVER_BASEPORT | tee -a $TEST_LOG
+echo TEST_CIRCBUFF_SIZE=$TEST_CIRCBUFF_SIZE | tee -a $TEST_LOG
+echo TEST_COUNTER_RATE=$TEST_COUNTER_RATE | tee -a $TEST_LOG
+echo TEST_COUNTER_DELAY=$TEST_COUNTER_DELAY | tee -a $TEST_LOG
+echo TEST_DRIVE=$TEST_DRIVE | tee -a $TEST_LOG
+
+echo TEST_EPICS_PVA_SERVER_PORT=$TEST_EPICS_PVA_SERVER_PORT | tee -a $TEST_LOG
+echo TEST_EPICS_PVA_BROADCAST_PORT=$TEST_EPICS_PVA_BROADCAST_PORT | tee -a $TEST_LOG
+echo TEST_PV_PREFIX=$TEST_PV_PREFIX | tee -a $TEST_LOG
+echo Start: `date` | tee -a $TEST_LOG
+
+# Run test
+TEST_DIR=$TEST_HOST_DIR/servers
 mkdir -p $TEST_DIR
-cat /proc/cpuinfo > $TEST_DIR/cpu.info
-cat /proc/meminfo > $TEST_DIR/mem.info
+uname -a > $TEST_HOST_DIR/uname.info
+cat /proc/cpuinfo > $TEST_HOST_DIR/cpu.info
+cat /proc/meminfo > $TEST_HOST_DIR/mem.info
+
 cd $TOP
-EPICS_PVA_SERVER_PORT=5086 EPICS_PVA_BROADCAST_PORT=5086 $PYPROCMGR -c 10  \
-	-n loadServer -p 50000 \
+TEST_DB=db/${TEST_DRIVE}_${TEST_N_COUNTERS}Counters.db
+
+# export variables that will be expanded by pyProcMgr
+export TEST_COUNTER_DELAY TEST_PV_PREFIX TEST_CIRCBUFF_SIZE TEST_DB
+
+# Launch pyProcMgr
+EPICS_PVA_SERVER_PORT=$TEST_EPICS_PVA_SERVER_PORT EPICS_PVA_BROADCAST_PORT=$TEST_EPICS_PVA_BROADCAST_PORT \
+$PYPROCMGR -c $TEST_N_LOADSERVERS  \
+	-n $TEST_APPTYPE -p $TEST_LOADSERVER_BASEPORT \
 	-D $TEST_DIR \
 	$LOADSERVER \
-	'-m DELAY=0.010,P=PVA:GW:TEST:$PYPROC_ID:,NELM=10 -d db/drive_100Counters.db'
-
-#$LOADSERVER	\
-#	-m DELAY=1.0,P=PVA:GW:TEST:1:,NELM=10	\
-#	-d $TOP/db/drive_10Counters.db
-
+	'-m DELAY=$TEST_COUNTER_DELAY,P=$TEST_PV_PREFIX$PYPROC_ID:,NELM=$TEST_CIRCBUFF_SIZE -d $TEST_DB'; \
+echo Done: `date` | tee -a $TEST_LOG
 

@@ -536,7 +536,11 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 
 int MAIN (int argc, char *argv[])
 {
-    try {
+#define DEV
+#ifndef DEV
+    try
+#endif
+	{
         int opt;                    /* getopt() current option */
         bool monitor    = true;
         bool fShow      = false;
@@ -756,9 +760,12 @@ int MAIN (int argc, char *argv[])
 
         return haderror ? 1 : 0;
     }
-    } catch(std::exception& e)
+    }
+#ifndef DEV
+	catch(std::exception& e)
     {
         std::cerr << "Error: " << e.what() << "\n";
-        return 1;
     }
+#endif
+	return 1;
 }

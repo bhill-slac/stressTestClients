@@ -1,4 +1,9 @@
 #!/bin/bash
+if [ $# -lt 1 -o "$1" == "-h" ]; then
+	echo Usage: $(basename ${BASH_SOURCE[0]}) testName
+	exit 1
+fi
+TESTNAME=$1
 
 PROCSERV=`which procServ`
 if [ ! -e "$PROCSERV" ]; then
@@ -16,53 +21,106 @@ HOSTNAME=`hostname -s`
 
 TOP=`readlink -f $(dirname ${BASH_SOURCE[0]})`
 
-echo PYPROCMGR = $PYPROCMGR
-echo TOP = $TOP
+SCRIPTDIR=`dirname ${BASH_SOURCE[0]}`
 
-TESTNAME=pva-ctrs-360
-export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/clients
-mkdir -p $TEST_DIR
-cat /proc/cpuinfo > $TEST_DIR/cpu.info
-cat /proc/meminfo > $TEST_DIR/mem.info
+# Configure Test
+TEST_APPTYPE=pvCapture
+source $SCRIPTDIR/stressTestDefault.env
+if [ -f source $SCRIPTDIR/stressTestDefault.env.local ]; then
+	source $SCRIPTDIR/stressTestDefault.env.local
+fi
+if [ -f $SCRIPTDIR/${TEST_APPTYPE}Default.env ]; then
+	source $SCRIPTDIR/${TEST_APPTYPE}Default.env
+fi
+if [ -f $TEST_TOP/default.env ]; then
+	source $TEST_TOP/default.env
+fi
+if [ -f $TEST_TOP/${TESTNAME}.env ]; then
+	source $TEST_TOP/${TESTNAME}.env 
+fi
 
-export N_SERVERS=10
-export N_CLIENTS=20
-export N_CNT_PER_SERVER=100
+N_CNT_PER_SERVER=$TEST_N_COUNTERS
+export N_PVS_PER_CLIENT=$((($TEST_N_LOADSERVERS*$N_CNT_PER_SERVER+$TEST_N_PVCAPTURE-1)/$TEST_N_PVCAPTURE))
+# Hack
+#TEST_N_PVCAPTURE=2
+#N_PVS_PER_CLIENT=5
 
-# Testing
-#export N_SERVERS=3
-#export N_CNT_PER_SERVER=5
-#export N_CLIENTS=4
+TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+mkdir -p $TEST_HOST_DIR
+TEST_LOG=$TEST_HOST_DIR/$TESTNAME-${TEST_APPTYPE}.log
 
-export N_PVS_PER_CLIENT=$((($N_SERVERS*$N_CNT_PER_SERVER+$N_CLIENTS-1)/$N_CLIENTS))
-echo N_CLIENTS=$N_CLIENTS
-echo N_SERVERS=$N_SERVERS
+echo TESTNAME=$TESTNAME | tee $TEST_LOG
+echo "Launching $TEST_N_PVCAPTURE $TEST_APPTYPE IOCs w/ $TEST_N_COUNTERS Counters each" | tee -a $TEST_LOG
+echo TEST_PVCAPTURE_BASEPORT=$TEST_PVCAPTURE_BASEPORT | tee -a $TEST_LOG
+echo TEST_CIRCBUFF_SIZE=$TEST_CIRCBUFF_SIZE | tee -a $TEST_LOG
+echo TEST_COUNTER_RATE=$TEST_COUNTER_RATE | tee -a $TEST_LOG
+echo TEST_COUNTER_DELAY=$TEST_COUNTER_DELAY | tee -a $TEST_LOG
+echo TEST_DRIVE=$TEST_DRIVE | tee -a $TEST_LOG
+echo TEST_EPICS_PVA_SERVER_PORT=$TEST_EPICS_PVA_SERVER_PORT | tee -a $TEST_LOG
+echo TEST_EPICS_PVA_BROADCAST_PORT=$TEST_EPICS_PVA_BROADCAST_PORT | tee -a $TEST_LOG
+echo TEST_PV_PREFIX=$TEST_PV_PREFIX | tee -a $TEST_LOG
+echo TEST_N_LOADSERVERS=$TEST_N_LOADSERVERS
 echo N_CNT_PER_SERVER=$N_CNT_PER_SERVER
 echo N_PVS_PER_CLIENT=$N_PVS_PER_CLIENT
 
-export CLIENT=pvCapture
-PORT=42000
+echo Start: `date` | tee -a $TEST_LOG
 
+# Run test
+TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+TEST_DIR=$TEST_HOST_DIR/clients
+mkdir -p $TEST_DIR
+uname -a > $TEST_HOST_DIR/uname.info
+cat /proc/cpuinfo > $TEST_HOST_DIR/cpu.info
+cat /proc/meminfo > $TEST_HOST_DIR/mem.info
+
+# Create PV Lists for pvCapture clients
 P=0
 C=0
-mkdir -p $TEST_DIR/$CLIENT${C}
-cat /dev/null > $TEST_DIR/$CLIENT${C}/pvs.list
+N_PVS=$(($TEST_N_PVCAPTURE * $N_PVS_PER_CLIENT))
+CLIENT_NAME=${TEST_APPTYPE}00
+mkdir -p $TEST_DIR/$CLIENT_NAME
+cat /dev/null > $TEST_DIR/$CLIENT_NAME/pvs.list
 for (( N = 0; N < $N_CNT_PER_SERVER ; ++N )) do
-	for (( S = 0; S < $N_SERVERS ; ++S )) do
-		echo PVA:GW:TEST:${S}:Count${N} >> $TEST_DIR/$CLIENT${C}/pvs.list
+	for (( S = 0; S < $TEST_N_LOADSERVERS ; ++S )) do
+		N_PV=$(($C * $N_PVS_PER_CLIENT + $P))
+		if (( $N_PV >= $N_PVS )); then
+			break;
+		fi
+		if (( $S >= 10 )); then
+			PRE=${TEST_PV_PREFIX}$S
+		else
+			PRE=${TEST_PV_PREFIX}0$S
+		fi
+		if (( $N >= 10 )); then
+			PV=${PRE}:Count${N}
+		else
+			PV=${PRE}:Count$0{N}
+		fi
+		echo $PV >> $TEST_DIR/$CLIENT_NAME/pvs.list
 		P=$(($P+1))
 		if (( $P >= $N_PVS_PER_CLIENT )) ; then
 			P=0
 			C=$(($C+1))
-			if (( $C < $N_CLIENTS )) ; then
-				mkdir -p $TEST_DIR/$CLIENT${C}
-				cat /dev/null > $TEST_DIR/$CLIENT${C}/pvs.list
+			if (( $C >= 10 )); then
+				CLIENT_NAME=${TEST_APPTYPE}$C
+			else
+				CLIENT_NAME=${TEST_APPTYPE}0$C
+			fi
+			if (( $C < $TEST_N_PVCAPTURE )) ; then
+				mkdir -p $TEST_DIR/$CLIENT_NAME
+				cat /dev/null > $TEST_DIR/$CLIENT_NAME/pvs.list
 			fi
 		fi
 	done
 done
-#echo $PYPROCMGR -c $N_CLIENTS ...
-cd $TOP
-$PYPROCMGR -v -c $N_CLIENTS -n $CLIENT -p $PORT -d 5.0 -D $TEST_DIR 'bin/$EPICS_HOST_ARCH/pvCapture -D $TEST_DIR/$CLIENT$PYPROC_ID -f $TEST_DIR/$CLIENT$PYPROC_ID/pvs.list'
 
+cd $TOP
+
+# export variables that will be expanded by pyProcMgr
+export TEST_DIR 
+
+#echo $PYPROCMGR -c $TEST_N_PVCAPTURE ...
+$PYPROCMGR -v -c $TEST_N_PVCAPTURE -n $TEST_APPTYPE -p $TEST_PVCAPTURE_BASEPORT -d 5.0 -D $TEST_DIR \
+	'bin/$EPICS_HOST_ARCH/pvCapture -D $TEST_DIR/pvCapture$PYPROC_ID -f $TEST_DIR/pvCapture$PYPROC_ID/pvs.list'; \
+echo Done: `date` | tee -a $TEST_LOG
 

@@ -1,4 +1,9 @@
 #!/bin/bash
+if [ $# -lt 1 -o "$1" == "-h" ]; then
+	echo Usage: $(basename ${BASH_SOURCE[0]}) testName
+	exit 1
+fi
+TESTNAME=$1
 
 PROCSERV=`which procServ`
 if [ ! -e "$PROCSERV" ]; then
@@ -11,31 +16,72 @@ if [ ! -e "$PYPROCMGR" ]; then
 	echo "Error: pyProcMgr.py not found!"
 	exit 1
 fi
-
 HOSTNAME=`hostname -s`
+SCRIPTDIR=`dirname ${BASH_SOURCE[0]}`
 
-TOP=`readlink -f $(dirname ${BASH_SOURCE[0]})`
+# Configure Test
+source $SCRIPTDIR/stressTestDefault.env
+TEST_APPTYPE=run_pvget
+if [ -f $SCRIPTDIR/${TEST_APPTYPE}Default.env ]; then
+	source $SCRIPTDIR/${TEST_APPTYPE}Default.env
+fi
+if [ -f $TEST_TOP/default.env ]; then
+	source $TEST_TOP/default.env
+fi
+if [ -f $TEST_TOP/${TESTNAME}.env ]; then
+	source $TEST_TOP/${TESTNAME}.env 
+fi
 
-#echo PYPROCMGR = $PYPROCMGR
-echo TOP = $TOP
+CLIENT_NAME=pvget
+TEST_N_RUN_PVGET_CLIENTS=10
 
-HOSTNAME=`hostname -s`
-TESTNAME=pva-ctrs-360
+TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+mkdir -p $TEST_HOST_DIR
+TEST_LOG=$TEST_HOST_DIR/$TESTNAME-${TEST_APPTYPE}.log
 
-export N_CLIENTS=10
-echo N_CLIENTS=$N_CLIENTS
+echo TESTNAME=$TESTNAME | tee $TEST_LOG
+echo "Launching $TEST_N_RUN_PVGET_CLIENTS ${TEST_APPTYPE} apps ..." | tee -a $TEST_LOG
 
-export CLIENT=pvget
-PORT=43000
+echo TEST_RUN_PVGET_BASEPORT=$TEST_RUN_PVGET_BASEPORT | tee -a $TEST_LOG
 
-export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/clients
-#export TEST_DIR=/reg/d/iocData/gwTest/$TESTNAME/$HOSTNAME/$CLIENT
-mkdir -p $TEST_DIR
+echo TEST_EPICS_PVA_SERVER_PORT=$TEST_EPICS_PVA_SERVER_PORT | tee -a $TEST_LOG
+echo TEST_EPICS_PVA_BROADCAST_PORT=$TEST_EPICS_PVA_BROADCAST_PORT | tee -a $TEST_LOG
+echo TEST_PV_PREFIX=$TEST_PV_PREFIX | tee -a $TEST_LOG
+echo Start: `date` | tee -a $TEST_LOG
 
+# Kill any pending stuck pvget related processes
 pkill -9 run_pvget.sh
 pkill -9 pvget
 
-#echo TEST_DIR=$TEST_DIR
-#echo $PYPROCMGR -c $N_CLIENTS ...
-$PYPROCMGR -c $N_CLIENTS -n $CLIENT -p $PORT -D $TEST_DIR "$TOP/run_pvget.sh" '$TEST_DIR/$CLIENT$PYPROC_ID' 'PVA:GW:TEST:$PYPROC_ID:Rate0 PVA:GW:TEST:$PYPROC_ID:Rate1 PVA:GW:TEST:$PYPROC_ID:Rate2 PVA:GW:TEST:$PYPROC_ID:Rate3 PVA:GW:TEST:$PYPROC_ID:Rate4 PVA:GW:TEST:$PYPROC_ID:Rate5 PVA:GW:TEST:$PYPROC_ID:Rate6 PVA:GW:TEST:$PYPROC_ID:Rate7 PVA:GW:TEST:$PYPROC_ID:Rate8 PVA:GW:TEST:$PYPROC_ID:Rate9'
+# Run test
+TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+TEST_DIR=$TEST_HOST_DIR/clients
+mkdir -p $TEST_DIR
+uname -a > $TEST_HOST_DIR/uname.info
+cat /proc/cpuinfo > $TEST_HOST_DIR/cpu.info
+cat /proc/meminfo > $TEST_HOST_DIR/mem.info
+
+export TEST_PVS=
+for (( S = 0; S < $TEST_N_LOADSERVERS ; ++S )) do
+	if (( $S >= 10 )); then
+		PRE=${TEST_PV_PREFIX}$S
+	else
+		PRE=${TEST_PV_PREFIX}0$S
+	fi
+	TEST_PVS+=" $PRE:Rate\$PYPROC_ID"
+done
+
+echo TEST_PVS=$TEST_PVS
+
+# export variables that will be expanded by pyProcMgr
+export CLIENT_NAME TEST_DIR TEST_PVS TEST_COUNTER_DELAY TEST_PV_PREFIX
+
+#echo $PYPROCMGR -c $TEST_N_RUN_PVGET_CLIENTS ...
+#	'$TEST_PV_PREFIX$PYPROC_ID:Rate0'
+#	'$TEST_PV_PREFIX$PYPROC_ID:Rate9'
+$PYPROCMGR -v -c $TEST_N_RUN_PVGET_CLIENTS -n $CLIENT_NAME \
+	-p $TEST_RUN_PVGET_BASEPORT -D $TEST_DIR \
+	"$SCRIPTDIR/run_pvget.sh" '$TEST_DIR/$CLIENT_NAME$PYPROC_ID' \
+	'$TEST_PVS'; \
+echo Done: `date` | tee -a $TEST_LOG
 
