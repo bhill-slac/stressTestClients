@@ -33,7 +33,10 @@ if [ -f $TEST_TOP/${TESTNAME}.env ]; then
 fi
 
 CLIENT_NAME=pvget
-TEST_N_RUN_PVGET_CLIENTS=10
+
+# Kill any pending stuck pvget related processes
+pkill -9 pvget
+pkill -9 run_pvget.sh
 
 TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
 mkdir -p $TEST_HOST_DIR
@@ -49,11 +52,6 @@ echo TEST_EPICS_PVA_BROADCAST_PORT=$TEST_EPICS_PVA_BROADCAST_PORT | tee -a $TEST
 echo TEST_PV_PREFIX=$TEST_PV_PREFIX | tee -a $TEST_LOG
 echo Start: `date` | tee -a $TEST_LOG
 
-# Kill any pending stuck pvget related processes
-pkill -9 pvget
-pkill -9 run_pvget.sh
-pkill -9 run_pvgetarray.sh
-
 # Run test
 TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
 TEST_DIR=$TEST_HOST_DIR/clients
@@ -62,7 +60,7 @@ uname -a > $TEST_HOST_DIR/uname.info
 cat /proc/cpuinfo > $TEST_HOST_DIR/cpu.info
 cat /proc/meminfo > $TEST_HOST_DIR/mem.info
 
-export TEST_PVS=
+TEST_PVS=''
 for (( S = 0; S < $TEST_N_LOADSERVERS ; ++S )) do
 	if (( $S >= 10 )); then
 		PRE=${TEST_PV_PREFIX}$S
@@ -73,7 +71,7 @@ for (( S = 0; S < $TEST_N_LOADSERVERS ; ++S )) do
 	TEST_PVS+=" $PRE:Rate\$PYPROC_ID"
 done
 
-echo TEST_PVS=$TEST_PVS
+#echo TEST_PVS=$TEST_PVS
 
 # export variables that will be expanded by pyProcMgr
 export CLIENT_NAME TEST_DIR TEST_PVS TEST_COUNTER_DELAY TEST_PV_PREFIX
