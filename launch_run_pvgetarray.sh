@@ -32,7 +32,7 @@ if [ -f $TEST_TOP/${TESTNAME}.env ]; then
 	source $TEST_TOP/${TESTNAME}.env 
 fi
 
-CLIENT_NAME=pvget
+CLIENT_NAME=pvgetarray
 TEST_N_RUN_PVGET_CLIENTS=10
 
 TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
@@ -49,11 +49,6 @@ echo TEST_EPICS_PVA_BROADCAST_PORT=$TEST_EPICS_PVA_BROADCAST_PORT | tee -a $TEST
 echo TEST_PV_PREFIX=$TEST_PV_PREFIX | tee -a $TEST_LOG
 echo Start: `date` | tee -a $TEST_LOG
 
-# Kill any pending stuck pvget related processes
-pkill -9 pvget
-pkill -9 run_pvget.sh
-pkill -9 run_pvgetarray.sh
-
 # Run test
 TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
 TEST_DIR=$TEST_HOST_DIR/clients
@@ -69,8 +64,7 @@ for (( S = 0; S < $TEST_N_LOADSERVERS ; ++S )) do
 	else
 		PRE=${TEST_PV_PREFIX}0$S
 	fi
-	TEST_PVS+=" $PRE:Count\$PYPROC_ID"
-	TEST_PVS+=" $PRE:Rate\$PYPROC_ID"
+	TEST_PVS+=" $PRE:CircBuff\$PYPROC_ID"
 done
 
 echo TEST_PVS=$TEST_PVS
@@ -80,7 +74,7 @@ export CLIENT_NAME TEST_DIR TEST_PVS TEST_COUNTER_DELAY TEST_PV_PREFIX
 
 $PYPROCMGR -v -c $TEST_N_RUN_PVGET_CLIENTS -n $CLIENT_NAME \
 	-p $TEST_RUN_PVGET_BASEPORT -D $TEST_DIR \
-	"$SCRIPTDIR/run_pvget.sh" '$TEST_DIR/$CLIENT_NAME$PYPROC_ID' \
+	"$SCRIPTDIR/run_pvgetarray.sh" '$TEST_DIR/$CLIENT_NAME$PYPROC_ID' \
 	'$TEST_PVS'; \
 echo Done: `date` | tee -a $TEST_LOG
 
