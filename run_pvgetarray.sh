@@ -41,9 +41,9 @@ do
 
 	for PV in $PVS;
 	do
-		echo Get: `date`; \
-		pvget -M json -p $TEST_PROVIDER -w $TEST_PVGET_TIMEOUT $PV > /dev/null \
-		echo Read $PV_SIZE bytes; `date` >> $TEST_DIR/$PV.pvgetarray &
+		echo Get: `date` >> $TEST_DIR/$PV.pvgetarray
+		pvget -p $TEST_PROVIDER -w $TEST_PVGET_TIMEOUT $PV > /dev/null; \
+		echo Read $PV_SIZE bytes: `date` >> $TEST_DIR/$PV.pvgetarray &
 	done
 	wait
 	#echo "pvgetarray jobs done"

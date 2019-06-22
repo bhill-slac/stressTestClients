@@ -28,8 +28,13 @@ fi
 if [ -f $TEST_TOP/default.env ]; then
 	source $TEST_TOP/default.env
 fi
-if [ -f $TEST_TOP/${TESTNAME}.env ]; then
-	source $TEST_TOP/${TESTNAME}.env 
+if [ -f $TEST_TOP/${TESTNAME}/test.env ]; then
+	source $TEST_TOP/${TESTNAME}/test.env 
+fi
+if [ -f $TEST_TOP/${TESTNAME}/${TESTNAME}.env ]; then
+	echo "Use of ${TESTNAME}/${TESTNAME}.env is deprecated"
+	echo "Please rename to ${TESTNAME}/test.env"
+	source $TEST_TOP/${TESTNAME}/${TESTNAME}.env 
 fi
 
 CLIENT_NAME=pvget
@@ -74,7 +79,7 @@ done
 #echo TEST_PVS=$TEST_PVS
 
 # export variables that will be expanded by pyProcMgr
-export CLIENT_NAME TEST_DIR TEST_PVS TEST_COUNTER_DELAY TEST_PV_PREFIX
+export CLIENT_NAME TEST_DIR TEST_PVS
 
 $PYPROCMGR -v -c $TEST_N_RUN_PVGET_CLIENTS -n $CLIENT_NAME \
 	-p $TEST_RUN_PVGET_BASEPORT -D $TEST_DIR \

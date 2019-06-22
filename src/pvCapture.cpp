@@ -322,15 +322,20 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
     /// Save the timestamped values on the queue to a file
     void saveValues( )
     {
-        if ( m_ValueQueue.size() == 0 )
-            return;
-
         std::string     saveFilePath( m_testDirPath );
         saveFilePath += "/";
         saveFilePath += mon.name();
         saveFilePath += ".pvCapture";
+
+		if ( m_ValueQueue.size() == 0 )
+        {
+			std::cout << "Warning: No values to save to test file: " << saveFilePath << std::endl;
+            return;
+		}
+
         // std::cout << "Creating test dir: " << m_testDirPath << std::endl;
-        mkdir( m_testDirPath.c_str(), ACCESSPERMS );
+        if ( mkdir( m_testDirPath.c_str(), ACCESSPERMS ) != 0 )
+        	std::cerr << "MonTracker::saveValues Error: Creating test dir: " << m_testDirPath << std::endl;
 
         std::cout << "Writing " << m_ValueQueue.size() << " values to test file: " << saveFilePath << std::endl;
         std::ofstream   fout( saveFilePath.c_str() );
@@ -344,6 +349,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
             fout << "    [ [ " << it->ts.secPastEpoch << ", " << it->ts.nsec << "], " << it->val << " ]";
         }
         fout << std::endl << "]" << std::endl;
+		fout.close();
     }
 
     /// capture is called for each pvAccess MonitorEvent::Data on the WorkQueue
@@ -703,6 +709,7 @@ int MAIN (int argc, char *argv[])
 
 		for ( std::vector<std::string>::const_iterator it = pvList.begin(); it != pvList.end(); ++it )
 		{
+			std::cout << "pvCapture: Launching MonTracker for " << *it << std::endl;
 			pvac::ClientChannel chan( provider.connect(*it) );
 
 			std::tr1::shared_ptr<MonTracker> mon(new MonTracker(*Q, chan, pvRequest, testDirPath.c_str(), fShow));
@@ -739,13 +746,13 @@ int MAIN (int argc, char *argv[])
             }
 			}
 
-            std::cout << std::endl;
             if(refmon.running())
             {
                 refmon.stop();
                 // show final counts
                 refmon.current();
             }
+            std::cout << "Saving values for " << tracked.size() << " PVs" << std::endl;
             for ( std::vector<std::tr1::shared_ptr<MonTracker> >::iterator it = tracked.begin(); it != tracked.end(); ++it )
             {
                 (*it)->saveValues();

@@ -26,7 +26,7 @@ SCRIPTDIR=`dirname ${BASH_SOURCE[0]}`
 # Configure Test
 TEST_APPTYPE=pvCapture
 source $SCRIPTDIR/stressTestDefault.env
-if [ -f source $SCRIPTDIR/stressTestDefault.env.local ]; then
+if [ -f $SCRIPTDIR/stressTestDefault.env.local ]; then
 	source $SCRIPTDIR/stressTestDefault.env.local
 fi
 if [ -f $SCRIPTDIR/${TEST_APPTYPE}Default.env ]; then
@@ -35,8 +35,13 @@ fi
 if [ -f $TEST_TOP/default.env ]; then
 	source $TEST_TOP/default.env
 fi
-if [ -f $TEST_TOP/${TESTNAME}.env ]; then
-	source $TEST_TOP/${TESTNAME}.env 
+if [ -f $TEST_TOP/${TESTNAME}/test.env ]; then
+	source $TEST_TOP/${TESTNAME}/test.env 
+fi
+if [ -f $TEST_TOP/${TESTNAME}/${TESTNAME}.env ]; then
+	echo "Use of ${TESTNAME}/${TESTNAME}.env is deprecated"
+	echo "Please rename to ${TESTNAME}/test.env"
+	source $TEST_TOP/${TESTNAME}/${TESTNAME}.env 
 fi
 
 N_CNT_PER_SERVER=$TEST_N_COUNTERS
@@ -120,7 +125,7 @@ cd $TOP
 export TEST_DIR 
 
 #echo $PYPROCMGR -c $TEST_N_PVCAPTURE ...
-$PYPROCMGR -c $TEST_N_PVCAPTURE -n $TEST_APPTYPE -p $TEST_PVCAPTURE_BASEPORT -d 5.0 -D $TEST_DIR \
-	'bin/$EPICS_HOST_ARCH/pvCapture -D $TEST_DIR/pvCapture$PYPROC_ID -f $TEST_DIR/pvCapture$PYPROC_ID/pvs.list'; \
+$PYPROCMGR -v -c $TEST_N_PVCAPTURE -n $TEST_APPTYPE -p $TEST_PVCAPTURE_BASEPORT -d 5.0 -D $TEST_DIR \
+	'bin/$EPICS_HOST_ARCH/pvCapture -S -D $TEST_DIR/pvCapture$PYPROC_ID -f $TEST_DIR/pvCapture$PYPROC_ID/pvs.list'; \
 echo Done: `date` | tee -a $TEST_LOG
 

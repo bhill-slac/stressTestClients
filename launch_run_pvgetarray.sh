@@ -28,8 +28,13 @@ fi
 if [ -f $TEST_TOP/default.env ]; then
 	source $TEST_TOP/default.env
 fi
-if [ -f $TEST_TOP/${TESTNAME}.env ]; then
-	source $TEST_TOP/${TESTNAME}.env 
+if [ -f $TEST_TOP/${TESTNAME}/test.env ]; then
+	source $TEST_TOP/${TESTNAME}/test.env 
+fi
+if [ -f $TEST_TOP/${TESTNAME}/${TESTNAME}.env ]; then
+	echo "Use of ${TESTNAME}/${TESTNAME}.env is deprecated"
+	echo "Please rename to ${TESTNAME}/test.env"
+	source $TEST_TOP/${TESTNAME}/${TESTNAME}.env 
 fi
 
 CLIENT_NAME=pvgetarray
@@ -42,7 +47,7 @@ mkdir -p $TEST_HOST_DIR
 TEST_LOG=$TEST_HOST_DIR/$TESTNAME-${TEST_APPTYPE}.log
 
 echo TESTNAME=$TESTNAME | tee $TEST_LOG
-echo "Launching $TEST_N_RUN_PVGET_CLIENTS ${TEST_APPTYPE} apps ..." | tee -a $TEST_LOG
+echo "Launching $TEST_N_RUN_PVGETARRAY_CLIENTS ${TEST_APPTYPE} apps ..." | tee -a $TEST_LOG
 
 echo TEST_RUN_PVGETARRAY_BASEPORT=$TEST_RUN_PVGETARRAY_BASEPORT | tee -a $TEST_LOG
 
@@ -74,7 +79,7 @@ done
 # export variables that will be expanded by pyProcMgr
 export CLIENT_NAME TEST_DIR TEST_PVS TEST_COUNTER_DELAY TEST_PV_PREFIX
 
-$PYPROCMGR -c $TEST_N_RUN_PVGET_CLIENTS -n $CLIENT_NAME \
+$PYPROCMGR -c $TEST_N_RUN_PVGETARRAY_CLIENTS -n $CLIENT_NAME \
 	-p $TEST_RUN_PVGETARRAY_BASEPORT -D $TEST_DIR \
 	"$SCRIPTDIR/run_pvgetarray.sh" '$TEST_DIR/$CLIENT_NAME$PYPROC_ID' \
 	'$TEST_PVS'; \
