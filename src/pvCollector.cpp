@@ -25,7 +25,40 @@ template<> size_t		pvCollector<double>::c_max_events		= 360000;	// 1 hour at 100
 template<> epicsMutex	pvCollector<double>::c_mutex;
 template<> std::map< std::string, pvCollector<double> * >	pvCollector<double>::c_instances;
 
-#if 0
+size_t	pvCollector::getMaxEvents()
+{
+	return c_max_events;
+}
+void	pvCollector::setMaxEvents( size_t maxEvents )
+{
+	c_max_events = maxEvents;
+}
+size_t	pvCollector::getNumInstances()
+{
+	return c_num_instances;
+}
+void	pvCollector::addPVCollector( const std::string & pvName, pvCollector & collector )
+{
+	epicsGuard<epicsMutex> G(c_mutex);
+	c_instances[pvName] = &collector;
+}
+
+template<> pvCollector<double> * pvCollector<double>::findPVCollector( const std::string & pvName )
+{
+	epicsGuard<epicsMutex> G(c_mutex);
+	pvCollector<double>	*	pCollector	= NULL;
+	std::map< std::string, pvCollector<double> * >::iterator	it;
+	it = c_instances.find( pvName );
+	if ( it != c_instances.end() )
+		pCollector	= it->second;
+	return pCollector;
+}
+
+//
+// pvCollector member functions
+//
+
+/// pvCollector::close()
 void pvCollector::close()
 {
     {
@@ -35,9 +68,8 @@ void pvCollector::close()
     wakeup.signal();
     processor.exitWait();
 }
-#endif
 
-#if 0
+
 template <typename T>
 void pvCollector::saveValue( epicsUInt64 tsKey, T value )
 {
@@ -55,7 +87,7 @@ void pvCollector::saveValue( epicsUInt64 tsKey, T value )
 		std::cerr << "pvCollector::saveValue exception caught: " << err.what() << std::endl;
 	}
 }
-#endif
+
 
 #if 0
 template <typename T>
@@ -76,17 +108,6 @@ void pvCollector::writeValues( std::ostream & output )
 	output << "]" << std::endl;
 }
 #endif
-
-template<> pvCollector<double> * pvCollector<double>::getPVCollector( const std::string & pvName )
-{
-	epicsGuard<epicsMutex> G(c_mutex);
-	pvCollector<double>	*	pCollector	= NULL;
-	std::map< std::string, pvCollector<double> * >::iterator	it;
-	it = c_instances.find( pvName );
-	if ( it != c_instances.end() )
-		pCollector	= it->second;
-	return pCollector;
-}
 
 extern "C" {
 //epicsExportAddress(double, maxEventRate);

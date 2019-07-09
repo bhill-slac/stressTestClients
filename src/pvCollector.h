@@ -11,21 +11,7 @@
 #include <pv/thread.h>
 #include <pv/sharedPtr.h>
 
-#if 0
-class PVStorage
-{
 
-public:		// Public class functions
-
-public:		// Public member variables
-    typedef std::map< epicsUInt64, T > events_t;
-
-private:	// Private member variables
-//    epicsMutex			m_mutex;
-}
-#endif
-
-template <typename T>
 class pvCollector
 {
     explicit pvCollector( const std::string pvName, unsigned int prio )
@@ -48,24 +34,11 @@ class pvCollector
 	}
 
 	/// saveValue called to save a new value to the collector
-    void saveValue( epicsUInt64 tsKey, T value )
-	{
-		try
-		{
-			epicsGuard<epicsMutex>	guard( m_mutex );
-			while ( m_events.size() >= c_max_events )
-			{
-				m_events.erase( m_events.begin() );
-			}
-			(void) m_events.insert( m_events.end(), std::make_pair( tsKey, value ) );
-		}
-		catch( std::exception & err )
-		{
-			std::cerr << "pvCollector::saveValue exception caught: " << err.what() << std::endl;
-		}
-	}
+#if 0
+    void saveValue( epicsUInt64 tsKey, T value );
+    void saveValues( std::list<std::pair<epicsUInt64,T>> newValues );
+#endif
 
-	//template <typename T>
     void writeValues( std::ostream & output )
 	{
 		epicsGuard<epicsMutex>	guard( m_mutex );
@@ -84,41 +57,25 @@ class pvCollector
 	}
 
 	/// getEvents
-    //template <typename T>
 	int getEvents( std::map< epicsUInt64, T > & events, epicsUInt64 from = 0, epicsUInt64 to = std::numeric_limits<epicsUInt64>::max() ) const;
 
 public:	// Public class functions
-    static size_t	getMaxEvents()
-	{
-		return c_max_events;
-	}
-    static void		setMaxEvents( size_t maxEvents )
-	{
-		c_max_events = maxEvents;
-	}
-    static size_t	getNumInstances()
-	{
-		return c_num_instances;
-	}
-	static void addPVCollector( const std::string & pvName, pvCollector & collector )
-	{
-        epicsGuard<epicsMutex> G(c_mutex);
-		c_instances[pvName] = &collector;
-	}
+    static size_t	getMaxEvents();
+    static void		setMaxEvents( size_t maxEvents );
+    static size_t	getNumInstances();
+	static void addPVCollector( const std::string & pvName, pvCollector & collector );
+	static	pvCollector		*	findPVCollector( const std::string & pvName );
 
 private:	// Private member variables
     epicsMutex						m_mutex;
 	std::string						m_pvName;
-    std::map< epicsUInt64, T >		m_events;
 
 private:	// Private class variables
 	static size_t		c_num_instances;
 	static size_t		c_max_events;		// Note: Can be changed dynamically
     static epicsMutex	c_mutex;
-    static std::map< std::string, pvCollector<T> * >	c_instances;
+    static std::map< std::string, pvCollector * >	c_instances;
 
-public:
-	static	pvCollector<T>	*	getPVCollector( const std::string & pvName );
 //private:	// Private class variables
     EPICS_NOT_COPYABLE(pvCollector)
 };
