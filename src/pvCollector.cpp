@@ -9,6 +9,7 @@
 #include <pv/reftrack.h>
 
 #include "pvCollector.h"
+#include "pvStorage.h"
 
 #include <epicsExport.h>
 #include <epicsGuard.h>
@@ -44,10 +45,10 @@ size_t	pvCollector::getNumInstances()
 {
 	return c_num_instances;
 }
-void	pvCollector::addPVCollector( const std::string & pvName, pvCollector & collector )
+void	pvCollector::addPVCollector( const std::string & pvName, pvCollector * pPVCollector )
 {
 	epicsGuard<epicsMutex> G(c_mutex);
-	c_instances[pvName] = &collector;
+	c_instances[pvName] = pPVCollector;
 }
 
 #if 1
@@ -67,6 +68,33 @@ template<> pvCollector<double> * pvCollector<double>::getPVCollector( const std:
 	it = c_instances.find( pvName );
 	if ( it != c_instances.end() )
 		pCollector	= it->second;
+
+	if ( pCollector == NULL )
+	{
+		pCollector = createPVCollector( pvName, type );
+	}
+	return pCollector;
+}
+
+pvCollector * pvCollector::createPVCollector( const std::string & pvName, pvd::ScalarType type )
+{
+	printf( "createPVCollector %s: type %d\n", pvName.c_str(), type );
+	epicsGuard<epicsMutex> G(c_mutex);
+	
+	pvCollector	*	pCollector	= NULL;
+	if ( pCollector == NULL )
+	{
+		switch ( type )
+		{
+		default:
+			break;
+		case pvd::pvDouble:
+			pCollector = new pvStorageDouble( pvName, type );
+			break;
+		}
+	}
+	if ( pCollector )
+		addPVCollector( pvName, pCollector );
 	return pCollector;
 }
 

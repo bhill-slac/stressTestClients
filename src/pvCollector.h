@@ -15,13 +15,14 @@
 
 class pvCollector
 {
-    explicit pvCollector( const std::string pvName, unsigned int prio )
+public:		// Public member functions
+    explicit pvCollector( const std::string pvName )
 		:	m_pvName(	pvName	)
 	{
 		REFTRACE_INCREMENT(c_num_instances);
 	}
 
-    ~pvCollector()
+    virtual ~pvCollector()
 	{
 		REFTRACE_DECREMENT(c_num_instances);
 		close();
@@ -63,7 +64,8 @@ public:	// Public class functions
     static size_t	getMaxEvents();
     static void		setMaxEvents( size_t maxEvents );
     static size_t	getNumInstances();
-	static void addPVCollector( const std::string & pvName, pvCollector & collector );
+	static void addPVCollector( const std::string & pvName, pvCollector * pPVCollector );
+	static	pvCollector		*	createPVCollector( const std::string & pvName, epics::pvData::ScalarType type );
 	static	pvCollector		*	getPVCollector( const std::string & pvName, epics::pvData::ScalarType type );
 
 private:	// Private member variables

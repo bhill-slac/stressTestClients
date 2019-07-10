@@ -14,23 +14,55 @@
 //#include "pvCollector.h"
 
 template <typename T>
-//class pvStorage : public pvCollector
-class pvStorage
+class pvStorage : public pvCollector
 {
 public:		// Public member functions
 
-	pvStorage<T>( );
+	pvStorage( const std::string & pvName, epics::pvData::ScalarType type )
+		:	pvCollector( pvName )
+		,	m_pvName( pvName )
+		,	m_Type(	type )
+	{
+	}
 
-    void saveValue( epicsUInt64 tsKey, T value );
+    void saveValue( epicsUInt64 tsKey, T value )
+	{
+		static_cast<T *>(this)->saveValue( tsKey, value );
+	}
+
+public:		// Public class functions
+public:		// Public member variables
+private:	// Private member variables
+//	typedef std::map< epicsUInt64, T > events_t;
+//	events_t 					m_events;
+	std::string					m_pvName;
+	epics::pvData::ScalarType	m_Type;
+};
+
+class pvStorageDouble : public pvStorage<double>
+{
+public:		// Public member functions
+	pvStorageDouble( const std::string & pvName, epics::pvData::ScalarType type )
+		:	pvStorage( pvName, type )
+	{
+	}
+
+    void saveValue( epicsUInt64 tsKey, double value )
 	{
 		try
 		{
 			epicsGuard<epicsMutex>	guard( m_mutex );
-			while ( m_events.size() >= c_max_events )
+			while ( m_events.size() >= getMaxEvents() )
 			{
 				m_events.erase( m_events.begin() );
 			}
-			(void) m_events.insert( m_events.crbegin(), std::make_pair( tsKey, value ) );
+			if ( m_events.size() == 0 )
+				(void) m_events.insert( std::make_pair( tsKey, value ) );
+			else
+			{
+				events_t::iterator	it = m_events.end();
+				(void) m_events.insert( --it, std::make_pair( tsKey, value ) );
+			}
 		}
 		catch( std::exception & err )
 		{
@@ -39,15 +71,12 @@ public:		// Public member functions
 	}
 
 public:		// Public class functions
-
 public:		// Public member variables
-
 private:	// Private member variables
-    typedef std::map< epicsUInt64, T > events_t;
-	events_t 					m_events;
-	pvd::ScalarType				m_Type;
-#else
-//    epicsMutex			m_mutex;
-}
+    typedef std::map< epicsUInt64, double > events_t;
+	//events_t 					m_events;
+    std::map< epicsUInt64, double > m_events;
+    epicsMutex					m_mutex;
+};
 
 #endif // PVSTORAGE_H
