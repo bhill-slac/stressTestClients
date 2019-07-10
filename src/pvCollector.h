@@ -9,6 +9,7 @@
 #include <epicsTypes.h>
 #include <epicsEvent.h>
 #include <pv/thread.h>
+#include <pv/pvIntrospect.h>
 #include <pv/sharedPtr.h>
 
 
@@ -16,11 +17,8 @@ class pvCollector
 {
     explicit pvCollector( const std::string pvName, unsigned int prio )
 		:	m_pvName(	pvName	)
-		,	m_events()
 	{
 		REFTRACE_INCREMENT(c_num_instances);
-
-		//m_events.resize(c_max_events);
 	}
 
     ~pvCollector()
@@ -29,9 +27,7 @@ class pvCollector
 		close();
 	}
 
-	void close( )
-	{
-	}
+	void close( );
 
 	/// saveValue called to save a new value to the collector
 #if 0
@@ -39,6 +35,7 @@ class pvCollector
     void saveValues( std::list<std::pair<epicsUInt64,T>> newValues );
 #endif
 
+#if 0
     void writeValues( std::ostream & output )
 	{
 		epicsGuard<epicsMutex>	guard( m_mutex );
@@ -55,16 +52,19 @@ class pvCollector
 		}
 		output << "]" << std::endl;
 	}
+#endif
 
+#if 0
 	/// getEvents
 	int getEvents( std::map< epicsUInt64, T > & events, epicsUInt64 from = 0, epicsUInt64 to = std::numeric_limits<epicsUInt64>::max() ) const;
+#endif
 
 public:	// Public class functions
     static size_t	getMaxEvents();
     static void		setMaxEvents( size_t maxEvents );
     static size_t	getNumInstances();
 	static void addPVCollector( const std::string & pvName, pvCollector & collector );
-	static	pvCollector		*	findPVCollector( const std::string & pvName );
+	static	pvCollector		*	getPVCollector( const std::string & pvName, epics::pvData::ScalarType type );
 
 private:	// Private member variables
     epicsMutex						m_mutex;

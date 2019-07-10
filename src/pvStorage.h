@@ -11,12 +11,15 @@
 #include <pv/thread.h>
 #include <pv/sharedPtr.h>
 
-#include "pvCollector.h"
+//#include "pvCollector.h"
 
 template <typename T>
-class pvStorage : public pvCollector
+//class pvStorage : public pvCollector
+class pvStorage
 {
 public:		// Public member functions
+
+	pvStorage<T>( );
 
     void saveValue( epicsUInt64 tsKey, T value );
 	{
@@ -41,6 +44,9 @@ public:		// Public member variables
 
 private:	// Private member variables
     typedef std::map< epicsUInt64, T > events_t;
+	events_t 					m_events;
+	pvd::ScalarType				m_Type;
+#else
 //    epicsMutex			m_mutex;
 }
 

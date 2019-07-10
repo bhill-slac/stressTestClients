@@ -10,6 +10,7 @@ pvCapture_SRCS += pvCapture.cpp
 
 PROD_HOST += pvGet
 pvGet_SRCS += pvGet.cpp
+pvGet_SRCS += pvCollector.cpp
 
 #PROD_HOST += pvget_tst
 #pvget_tst_SRCS += pvget_tst.cpp

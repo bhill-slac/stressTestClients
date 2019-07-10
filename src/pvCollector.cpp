@@ -20,10 +20,17 @@ static double maxEventAge = 2.5;
 
 int collectorDebug;
 
+#if 1
+size_t		pvCollector::c_num_instances	= 0;
+size_t		pvCollector::c_max_events		= 360000;	// 1 hour at 100hz
+epicsMutex	pvCollector::c_mutex;
+std::map< std::string, pvCollector * >	pvCollector::c_instances;
+#else
 template<> size_t		pvCollector<double>::c_num_instances	= 0;
 template<> size_t		pvCollector<double>::c_max_events		= 360000;	// 1 hour at 100hz
 template<> epicsMutex	pvCollector<double>::c_mutex;
 template<> std::map< std::string, pvCollector<double> * >	pvCollector<double>::c_instances;
+#endif
 
 size_t	pvCollector::getMaxEvents()
 {
@@ -43,11 +50,20 @@ void	pvCollector::addPVCollector( const std::string & pvName, pvCollector & coll
 	c_instances[pvName] = &collector;
 }
 
-template<> pvCollector<double> * pvCollector<double>::findPVCollector( const std::string & pvName )
+#if 1
+pvCollector * pvCollector::getPVCollector( const std::string & pvName, pvd::ScalarType type )
+#else
+template<> pvCollector<double> * pvCollector<double>::getPVCollector( const std::string & pvNam, pvd::ScalarType typee )
+#endif
 {
 	epicsGuard<epicsMutex> G(c_mutex);
+#if 1
+	pvCollector	*	pCollector	= NULL;
+	std::map< std::string, pvCollector * >::iterator	it;
+#else
 	pvCollector<double>	*	pCollector	= NULL;
 	std::map< std::string, pvCollector<double> * >::iterator	it;
+#endif
 	it = c_instances.find( pvName );
 	if ( it != c_instances.end() )
 		pCollector	= it->second;
@@ -63,13 +79,14 @@ void pvCollector::close()
 {
     {
         epicsGuard<epicsMutex> G(m_mutex);
-        run = false;
+        //run = false;
     }
-    wakeup.signal();
-    processor.exitWait();
+    //wakeup.signal();
+    //processor.exitWait();
 }
 
 
+#if 0
 template <typename T>
 void pvCollector::saveValue( epicsUInt64 tsKey, T value )
 {
@@ -87,6 +104,7 @@ void pvCollector::saveValue( epicsUInt64 tsKey, T value )
 		std::cerr << "pvCollector::saveValue exception caught: " << err.what() << std::endl;
 	}
 }
+#endif
 
 
 #if 0

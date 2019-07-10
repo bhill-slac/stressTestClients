@@ -38,6 +38,8 @@
 #include <pv/logger.h>
 #include <pva/client.h>
 
+#include "pvCollector.h"
+
 #define USE_SIGNAL
 #ifndef EXECNAME
 #define EXECNAME "pvGet"
@@ -281,6 +283,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
     std::deque<t_TsReal>   	 	m_ValueQueue;
     epicsMutex      			m_QueueLock;
 	const pvd::PVStructurePtr	m_pvStruct; 
+	pvCollector				*	m_pvCollector;
 	//pvac::ClientChannel			m_clientChannel;
 
     Getter(WorkQueue& monwork, pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, bool fCapture, bool fShow, double repeat )
@@ -298,6 +301,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 #else
         op = channel.get(this, pvRequest);
 #endif
+		printf( "Getter Channel %s: NTScalar\n", channel.name().c_str() );
     }
     virtual ~Getter()
  	{
@@ -394,6 +398,21 @@ struct Getter : public pvac::ClientChannel::GetCallback,
         std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = evt.value;
         std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct2 = m_pvStruct;
         assert( pvStruct != 0 );
+#if 1
+		std::tr1::shared_ptr<const pvd::PVScalar> pPVScalar;
+		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
+		if ( pPVScalar )
+			printf( "Channel %s:	epics:nt/NTScalar\n", op.name().c_str() );
+		pvd::FieldConstPtr	pField	= pPVScalar->getField();
+		pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
+		if ( pScalar )
+		{
+			printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", op.name().c_str(), pField->getType(), pScalar->getScalarType() );
+			m_pvCollector = pvCollector::getPVCollector( op.name(), pScalar->getScalarType() );
+		}
+#else
+		m_pvCollector = pvCollector::getPVCollector( op.name(), pvd::pvDouble );
+#endif
 
         // std::cout << *valfld
         // const PVFieldPtrArray & pvFields = pvStruct->getPVFields();
@@ -541,6 +560,24 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
         ,mon( channel.monitor(this, pvRequest) )
     {
 		setName( channel.name() );
+		printf( "Channel %s: NTScalar\n", channel.name().c_str() );
+#if 1
+        std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = mon.root;
+        assert( pvStruct != 0 );
+		std::tr1::shared_ptr<const pvd::PVScalar> pPVScalar;
+		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
+		if ( pPVScalar )
+			printf( "Channel %s:	epics:nt/NTScalar\n", channel.name().c_str() );
+		pvd::FieldConstPtr	pField	= pPVScalar->getField();
+		pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
+		if ( pScalar )
+		{
+			printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", channel.name().c_str(), pField->getType(), pScalar->getScalarType() );
+			m_pvCollector = pvCollector::getPVCollector( channel.name(), pScalar->getScalarType() );
+		}
+#else
+		m_pvCollector = pvCollector::getPVCollector( channel.name(), pvd::pvDouble );
+#endif
 	}
     virtual ~MonTracker()
     {
@@ -560,15 +597,16 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 		restartTracker();
 	}
 
-    WorkQueue   &   monwork;
+    WorkQueue			&   monwork;
 
-    pvd::BitSet valid; // only access for process()
-	bool            fCapture;
-    bool            fShow;
+    pvd::BitSet				valid; // only access for process()
+	bool					fCapture;
+    bool					fShow;
     //std::string			    m_Name;
     size_t                  m_QueueSizeMax;
     std::deque<t_TsReal>    m_ValueQueue;
     epicsMutex      		m_QueueLock;
+	pvCollector			*	m_pvCollector;
 
     pvac::Monitor mon; // must be last data member
 
@@ -970,6 +1008,12 @@ int MAIN (int argc, char *argv[])
             pvList.push_back( argv[i] );
         }
 
+		if ( pvList.size() == 0 )
+		{
+			usage();
+			return 1;
+		}
+
         // Everything up to here is just related to handling cmd line arguments
         // Configure logging
         SET_LOG_LEVEL(debugFlag ? epics::pvAccess::logLevelDebug : epics::pvAccess::logLevelError);
@@ -1059,4 +1103,6 @@ int MAIN (int argc, char *argv[])
         std::cerr << EXECNAME << "Error: " << e.what() << "\n";
         return 1;
     }
+
+	return 0;
 }
