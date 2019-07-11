@@ -7,7 +7,7 @@
 #include <map>
 #include <algorithm>
 
-#include <epicsMath.h>
+#include <errno.h>
 #include <errlog.h>
 #include <pv/reftrack.h>
 
@@ -16,6 +16,7 @@
 
 #include <epicsExport.h>
 #include <epicsGuard.h>
+#include <epicsMath.h>
 
 namespace pvd = epics::pvData;
 
@@ -84,7 +85,7 @@ template<> pvCollector<double> * pvCollector<double>::getPVCollector( const std:
 
 pvCollector * pvCollector::createPVCollector( const std::string & pvName, pvd::ScalarType type )
 {
-	printf( "createPVCollector %s: type %d\n", pvName.c_str(), type );
+	printf( "createPVCollector %s: type %s\n", pvName.c_str(), pvd::ScalarTypeFunc::name(type) );
 	epicsGuard<epicsMutex> G(c_mutex);
 	
 	pvCollector	*	pCollector	= NULL;
@@ -93,6 +94,7 @@ pvCollector * pvCollector::createPVCollector( const std::string & pvName, pvd::S
 		switch ( type )
 		{
 		default:
+			printf( "createPVCollector %s: type %s not supported yet!\n", pvName.c_str(), pvd::ScalarTypeFunc::name(type) );
 			break;
 		case pvd::pvDouble:
 			pCollector = new pvStorage<double>( pvName, type );
@@ -128,9 +130,14 @@ void pvCollector::writeValues( const std::string & testDirPath )
 	std::string     saveFilePath( testDirPath );
 	saveFilePath += "/";
 	saveFilePath += m_pvName;
-	saveFilePath += ".pvCollect";
+	// saveFilePath += ".pvCollect";
 	// std::cout << "Creating test dir: " << testDirPath << std::endl;
-	mkdir( testDirPath.c_str(), ACCESSPERMS );
+	int status = mkdir( testDirPath.c_str(), ACCESSPERMS );
+	if ( status != 0 && errno != EEXIST )
+	{
+		std::cerr << "pvCollector::writeValues error " << errno << " creating test dir: " << testDirPath << std::endl;
+		std::cerr << strerror(errno) << std::endl;
+	}
 
 	std::cout << "Writing " << getNumSavedValues() << " values to test file: " << saveFilePath << std::endl;
 	std::ofstream   fout( saveFilePath.c_str() );

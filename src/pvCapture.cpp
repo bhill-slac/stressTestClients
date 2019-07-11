@@ -13,6 +13,7 @@
 #include <fstream>
 #include <sstream>
 
+#include <errno.h>
 #include <math.h>
 #include <signal.h>
 #include <stdio.h>
@@ -334,9 +335,12 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
 		}
 
         // std::cout << "Creating test dir: " << m_testDirPath << std::endl;
-        if ( mkdir( m_testDirPath.c_str(), ACCESSPERMS ) != 0 )
-        	std::cerr << "MonTracker::saveValues Error: Creating test dir: " << m_testDirPath << std::endl;
-
+        int status = mkdir( m_testDirPath.c_str(), ACCESSPERMS );
+        if ( status != 0 && errno != EEXIST )
+		{
+			std::cerr << "MonTracker::saveValues error " << errno << " creating test dir: " << m_testDirPath << std::endl;
+			std::cerr << strerror(errno) << std::endl;
+		}
         std::cout << "Writing " << m_ValueQueue.size() << " values to test file: " << saveFilePath << std::endl;
         std::ofstream   fout( saveFilePath.c_str() );
         fout << "[";
