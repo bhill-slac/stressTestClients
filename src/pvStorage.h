@@ -16,6 +16,8 @@
 template <typename T>
 class pvStorage : public pvCollector
 {
+    typedef std::map< epicsUInt64, T > events_t;
+	friend class pvStorageDouble;
 public:		// Public member functions
 
 	pvStorage( const std::string & pvName, epics::pvData::ScalarType type )
@@ -33,8 +35,14 @@ public:		// Public member functions
 		static_cast<T *>(this)->saveValue( tsKey, value );
 	}
 
+	size_t getNumSavedValues( ) const
+	{
+		return m_events.size();
+	}
+
 public:		// Public class functions
 public:		// Public member variables
+	events_t 					m_events;
 private:	// Private member variables
 	std::string					m_pvName;
 	epics::pvData::ScalarType	m_Type;
@@ -78,7 +86,7 @@ public:		// Public member functions
 public:		// Public class functions
 public:		// Public member variables
 private:	// Private member variables
-	events_t 					m_events;
+	//events_t 					m_events;
     epicsMutex					m_mutex;
 };
 

@@ -489,6 +489,8 @@ struct Getter : public pvac::ClientChannel::GetCallback,
     /// Save the timestamped values on the queue to a file
     void saveValues( const std::string & testDirPath )
     {
+		if ( m_pvCollector )
+			printf( "PVCollector %s: Saved %zu values.\n", m_Name.c_str(), m_pvCollector->getNumSavedValues() );
         if ( m_ValueQueue.size() == 0 )
             return;
 
