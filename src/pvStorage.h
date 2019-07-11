@@ -72,7 +72,7 @@ public:		// Public member functions
 		std::string     saveFilePath( testDirPath );
 		saveFilePath += "/";
 		saveFilePath += m_pvName;
-		saveFilePath += ".pvCollect";
+		//saveFilePath += ".pvCollect";
 		// std::cout << "Creating test dir: " << testDirPath << std::endl;
 		mkdir( testDirPath.c_str(), ACCESSPERMS );
 

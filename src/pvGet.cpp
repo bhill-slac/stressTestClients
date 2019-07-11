@@ -493,6 +493,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 		{
 			printf( "PVCollector %s: Saved %zu values.\n", m_Name.c_str(), m_pvCollector->getNumSavedValues() );
 			m_pvCollector->writeValues( testDirPath );
+			return;
 		}
         if ( m_ValueQueue.size() == 0 )
             return;
