@@ -39,6 +39,7 @@
 #include <pva/client.h>
 
 #include "pvCollector.h"
+#include "pvStorage.h"
 
 #define USE_SIGNAL
 #ifndef EXECNAME
@@ -274,16 +275,16 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 {
     POINTER_DEFINITIONS(Getter);
 
-    WorkQueue   &   monwork;
-    pvac::Operation op;
-	bool            fCapture;
-	bool            fShow;
+    WorkQueue   			&   monwork;
+    pvac::Operation 			op;
+	bool            			fCapture;
+	bool            			fShow;
 	double						m_Repeat;
     size_t                 	 	m_QueueSizeMax;
     std::deque<t_TsReal>   	 	m_ValueQueue;
     epicsMutex      			m_QueueLock;
 	const pvd::PVStructurePtr	m_pvStruct; 
-	pvCollector				*	m_pvCollector;
+	pvStorageDouble			*	m_pvCollector;
 	//pvac::ClientChannel			m_clientChannel;
 
     Getter(WorkQueue& monwork, pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, bool fCapture, bool fShow, double repeat )
@@ -301,7 +302,6 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 #else
         op = channel.get(this, pvRequest);
 #endif
-		printf( "Getter Channel %s: NTScalar\n", channel.name().c_str() );
     }
     virtual ~Getter()
  	{
@@ -398,28 +398,23 @@ struct Getter : public pvac::ClientChannel::GetCallback,
         std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = evt.value;
         std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct2 = m_pvStruct;
         assert( pvStruct != 0 );
-#if 1
 		std::tr1::shared_ptr<const pvd::PVScalar> pPVScalar;
 		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
 		if ( pPVScalar )
-			printf( "Channel %s:	epics:nt/NTScalar\n", op.name().c_str() );
-		pvd::FieldConstPtr	pField	= pPVScalar->getField();
-		pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
-		if ( pScalar )
 		{
-			printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", op.name().c_str(), pField->getType(), pScalar->getScalarType() );
-			m_pvCollector = pvCollector::getPVCollector( op.name(), pScalar->getScalarType() );
+			pvd::FieldConstPtr	pField	= pPVScalar->getField();
+			pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
+			if ( pScalar )
+			{
+				// printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", op.name().c_str(), pField->getType(), pScalar->getScalarType() );
+				pvCollector	*	pCollector = pvCollector::getPVCollector( op.name(), pScalar->getScalarType() );
+				m_pvCollector = dynamic_cast<pvStorageDouble *>( pCollector );
+			}
 		}
-#else
-		m_pvCollector = pvCollector::getPVCollector( op.name(), pvd::pvDouble );
-#endif
 
         // std::cout << *valfld
         // const PVFieldPtrArray & pvFields = pvStruct->getPVFields();
         // pvStruct->getSubField<pvd::PVDouble>("value")
-        // pvStruct->getSubField<pvd::PVInt>("value")
-        // pvStruct->getSubFieldT<pvd::PVULong>("value")
-        // StructureConstPtr    structure = pvStruct->getStructure();
         // cout << ScalarTypeFunc::name(pPVScalarValue->typeCode);
         // cout << ScalarTypeFunc::name(PVT::typeCode);
         // template<> const ScalarType PVDouble::typeCode = pvDouble;
@@ -454,13 +449,21 @@ struct Getter : public pvac::ClientChannel::GetCallback,
             epicsTimeStamp  timeStamp;
             timeStamp.secPastEpoch = secPastEpoch;
             timeStamp.nsec = nsec;
-            //pvd::TimeStamp    timeStamp( secPastEpoch, nsec );
             t_TsReal    tsValue( timeStamp, value );
+			if( m_pvCollector )
+			{
+				// printf( "Getter::Capture %s: saveValue %f\n", op.name().c_str(), value );
+				epicsUInt64		tsKey = timeStamp.secPastEpoch;
+				tsKey <<= 32;
+				tsKey += timeStamp.nsec;
+				m_pvCollector->saveValue( tsKey, value );
+			}
             t_TsReal    tsPrior;
             assert( isnan(tsPrior.val) );
 
             //if ( pStatus == NULL || pStatus->get() != NO_ALARM )
             //  return;
+
             {   // Keep guard while accessing m_ValueQueue
             epicsGuard<epicsMutex> G(m_QueueLock);
             if ( !m_ValueQueue.empty() )
@@ -560,24 +563,20 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
         ,mon( channel.monitor(this, pvRequest) )
     {
 		setName( channel.name() );
-		printf( "Channel %s: NTScalar\n", channel.name().c_str() );
-#if 1
         std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = mon.root;
         assert( pvStruct != 0 );
 		std::tr1::shared_ptr<const pvd::PVScalar> pPVScalar;
 		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
 		if ( pPVScalar )
-			printf( "Channel %s:	epics:nt/NTScalar\n", channel.name().c_str() );
-		pvd::FieldConstPtr	pField	= pPVScalar->getField();
-		pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
-		if ( pScalar )
 		{
-			printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", channel.name().c_str(), pField->getType(), pScalar->getScalarType() );
-			m_pvCollector = pvCollector::getPVCollector( channel.name(), pScalar->getScalarType() );
+			pvd::FieldConstPtr	pField	= pPVScalar->getField();
+			pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
+			if ( pScalar )
+			{
+				// printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", channel.name().c_str(), pField->getType(), pScalar->getScalarType() );
+				m_pvCollector = pvCollector::getPVCollector( channel.name(), pScalar->getScalarType() );
+			}
 		}
-#else
-		m_pvCollector = pvCollector::getPVCollector( channel.name(), pvd::pvDouble );
-#endif
 	}
     virtual ~MonTracker()
     {

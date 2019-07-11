@@ -67,7 +67,10 @@ template<> pvCollector<double> * pvCollector<double>::getPVCollector( const std:
 #endif
 	it = c_instances.find( pvName );
 	if ( it != c_instances.end() )
+	{
+		// printf( "getPVCollector Channel %s:	Found pvCollector\n", pvName.c_str() );
 		pCollector	= it->second;
+	}
 
 	if ( pCollector == NULL )
 	{
@@ -112,27 +115,6 @@ void pvCollector::close()
     //wakeup.signal();
     //processor.exitWait();
 }
-
-
-#if 0
-template <typename T>
-void pvCollector::saveValue( epicsUInt64 tsKey, T value )
-{
-	try
-	{
-		epicsGuard<epicsMutex>	guard( m_mutex );
-		while ( m_events.size() >= c_max_events )
-		{
-			m_events.erase( m_events.begin() );
-		}
-		(void) m_events.insert( m_events.end(), std::make_pair( tsKey, value ) );
-	}
-	catch( std::exception & err )
-	{
-		std::cerr << "pvCollector::saveValue exception caught: " << err.what() << std::endl;
-	}
-}
-#endif
 
 
 #if 0

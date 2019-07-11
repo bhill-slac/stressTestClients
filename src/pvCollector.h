@@ -31,8 +31,9 @@ public:		// Public member functions
 	void close( );
 
 	/// saveValue called to save a new value to the collector
-#if 0
+	template<typename T>
     void saveValue( epicsUInt64 tsKey, T value );
+#if 0
     void saveValues( std::list<std::pair<epicsUInt64,T>> newValues );
 #endif
 

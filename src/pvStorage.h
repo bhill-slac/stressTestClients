@@ -27,20 +27,22 @@ public:		// Public member functions
 
     void saveValue( epicsUInt64 tsKey, T value )
 	{
+		epicsUInt32		sec		= static_cast<epicsUInt32>( tsKey >> 32 );
+		epicsUInt32		nsec	= static_cast<epicsUInt32>( tsKey );
+		std::cout << "pvStorage::saveValue Saving " << value << " at [ " << sec << ", " << nsec << " ]" << std::endl;
 		static_cast<T *>(this)->saveValue( tsKey, value );
 	}
 
 public:		// Public class functions
 public:		// Public member variables
 private:	// Private member variables
-//	typedef std::map< epicsUInt64, T > events_t;
-//	events_t 					m_events;
 	std::string					m_pvName;
 	epics::pvData::ScalarType	m_Type;
 };
 
 class pvStorageDouble : public pvStorage<double>
 {
+    typedef std::map< epicsUInt64, double > events_t;
 public:		// Public member functions
 	pvStorageDouble( const std::string & pvName, epics::pvData::ScalarType type )
 		:	pvStorage( pvName, type )
@@ -63,6 +65,9 @@ public:		// Public member functions
 				events_t::iterator	it = m_events.end();
 				(void) m_events.insert( --it, std::make_pair( tsKey, value ) );
 			}
+			// epicsUInt32		sec		= static_cast<epicsUInt32>( tsKey >> 32 );
+			// epicsUInt32		nsec	= static_cast<epicsUInt32>( tsKey );
+			// std::cout << "pvStorageDouble::saveValue Saving " << value << " at [ " << sec << ", " << nsec << " ]" << std::endl;
 		}
 		catch( std::exception & err )
 		{
@@ -73,9 +78,7 @@ public:		// Public member functions
 public:		// Public class functions
 public:		// Public member variables
 private:	// Private member variables
-    typedef std::map< epicsUInt64, double > events_t;
-	//events_t 					m_events;
-    std::map< epicsUInt64, double > m_events;
+	events_t 					m_events;
     epicsMutex					m_mutex;
 };
 
