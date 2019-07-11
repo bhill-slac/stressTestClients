@@ -33,28 +33,17 @@ public:		// Public member functions
 	/// saveValue called to save a new value to the collector
 	template<typename T>
     void saveValue( epicsUInt64 tsKey, T value );
-#if 0
-    void saveValues( std::list<std::pair<epicsUInt64,T>> newValues );
-#endif
 
-#if 0
-    void writeValues( std::ostream & output )
+	template<typename T>
+    void saveValues( std::list< std::pair<epicsUInt64,T> > newValues );
+
+    void writeValues( const std::string & testDirPath );
+    void writeValues( std::ostream & fout );
+
+	virtual size_t getNumSavedValues( )
 	{
-		epicsGuard<epicsMutex>	guard( m_mutex );
-		std::map< epicsUInt64, double >::iterator it2 = m_events.begin();
-
-		output << "[" << std::endl;
-		for ( std::map< epicsUInt64, double >::iterator it = m_events.begin(); it != m_events.end(); ++it )
-		{
-			epicsUInt64		key		= it->first;
-			epicsUInt32		sec		= key >> 32;
-			epicsUInt32		nsec	= key;
-			output	<<	std::fixed << std::setw(17)
-					<< "    [	[ "	<< sec << ", " << nsec << "], " << it->second << " ]," << std::endl;
-		}
-		output << "]" << std::endl;
+		return 0;
 	}
-#endif
 
 #if 0
 	/// getEvents

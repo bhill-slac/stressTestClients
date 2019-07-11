@@ -1,5 +1,8 @@
 #include <iomanip>
 #include <iostream>
+#include <fstream>
+#include <stdio.h>
+#include <sys/stat.h>
 #include <list>
 #include <map>
 #include <algorithm>
@@ -92,7 +95,7 @@ pvCollector * pvCollector::createPVCollector( const std::string & pvName, pvd::S
 		default:
 			break;
 		case pvd::pvDouble:
-			pCollector = new pvStorageDouble( pvName, type );
+			pCollector = new pvStorage<double>( pvName, type );
 			break;
 		}
 	}
@@ -116,6 +119,39 @@ void pvCollector::close()
     //processor.exitWait();
 }
 
+
+void pvCollector::writeValues( const std::string & testDirPath )
+{
+	if ( getNumSavedValues() == 0 )
+		return;
+
+	std::string     saveFilePath( testDirPath );
+	saveFilePath += "/";
+	saveFilePath += m_pvName;
+	saveFilePath += ".pvCollect";
+	// std::cout << "Creating test dir: " << testDirPath << std::endl;
+	mkdir( testDirPath.c_str(), ACCESSPERMS );
+
+	std::cout << "Writing " << getNumSavedValues() << " values to test file: " << saveFilePath << std::endl;
+	std::ofstream   fout( saveFilePath.c_str() );
+	writeValues( fout );
+#if 0
+	fout << "[" << std::endl;
+	for ( std::deque<t_TsReal>::iterator it = m_ValueQueue.begin(); it != m_ValueQueue.end(); ++it )
+	{
+		fout	<<	std::fixed << std::setw(17)
+				<< "    [	[ "	<< it->ts.secPastEpoch << ", " << it->ts.nsec << "], " << it->val << " ]," << std::endl;
+	}
+	fout << "]" << std::endl;
+#endif
+}
+
+
+void pvCollector::writeValues( std::ostream & fout )
+{
+	fout << "[" << std::endl;
+	fout << "]" << std::endl;
+}
 
 #if 0
 template <typename T>

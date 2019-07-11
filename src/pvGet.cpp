@@ -110,7 +110,7 @@ struct Tracker
     }
 	virtual void restart( pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest ) = 0;
 
-    virtual void saveValues( const std::string & testDirPath ) = 0;
+    virtual void writeValues( const std::string & testDirPath ) = 0;
 
 	/// getName( const std::string & name )
 	const std::string & getName( ) const
@@ -284,7 +284,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
     std::deque<t_TsReal>   	 	m_ValueQueue;
     epicsMutex      			m_QueueLock;
 	const pvd::PVStructurePtr	m_pvStruct; 
-	pvStorageDouble			*	m_pvCollector;
+	pvStorage<double>			*	m_pvCollector;
 	//pvac::ClientChannel			m_clientChannel;
 
     Getter(WorkQueue& monwork, pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, bool fCapture, bool fShow, double repeat )
@@ -408,7 +408,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 			{
 				// printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", op.name().c_str(), pField->getType(), pScalar->getScalarType() );
 				pvCollector	*	pCollector = pvCollector::getPVCollector( op.name(), pScalar->getScalarType() );
-				m_pvCollector = dynamic_cast<pvStorageDouble *>( pCollector );
+				m_pvCollector = dynamic_cast<pvStorage<double> *>( pCollector );
 			}
 		}
 
@@ -487,10 +487,13 @@ struct Getter : public pvac::ClientChannel::GetCallback,
     }
 
     /// Save the timestamped values on the queue to a file
-    void saveValues( const std::string & testDirPath )
+    void writeValues( const std::string & testDirPath )
     {
 		if ( m_pvCollector )
+		{
 			printf( "PVCollector %s: Saved %zu values.\n", m_Name.c_str(), m_pvCollector->getNumSavedValues() );
+			m_pvCollector->writeValues( testDirPath );
+		}
         if ( m_ValueQueue.size() == 0 )
             return;
 
@@ -737,7 +740,7 @@ struct MonTracker : public pvac::ClientChannel::MonitorCallback,
     }
 
     /// Save the timestamped values on the queue to a file
-    void saveValues( const std::string & testDirPath )
+    void writeValues( const std::string & testDirPath )
     {
         if ( m_ValueQueue.size() == 0 )
             return;
@@ -1090,7 +1093,7 @@ int MAIN (int argc, char *argv[])
 
 	for ( std::vector<std::tr1::shared_ptr<Tracker> >::iterator it = tracked.begin(); it != tracked.end(); ++it )
 	{
-		(*it)->saveValues( testDirPath );
+		(*it)->writeValues( testDirPath );
 	}
 
 	if(refmon.running())
