@@ -110,7 +110,7 @@ class pvStorageDouble : public pvStorage<double>
     typedef std::map< epicsUInt64, double > events_t;
 public:		// Public member functions
 	pvStorageDouble( const std::string & pvName, epics::pvData::ScalarType type )
-		:	pvStorage( pvName, type )
+		:	pvStorage<double>( pvName, type )
 	{
 	}
 
