@@ -211,7 +211,7 @@ struct WorkQueue : public epicsThreadRunable
     WorkQueue()
         :running(true)
         ,worker(pvd::Thread::Config()
-                .name("pvCapture handler")
+                .name("pvaEventHandler")
                 .autostart(true)
                 .run(this))
     {}
@@ -258,7 +258,7 @@ struct WorkQueue : public epicsThreadRunable
                     epicsGuardRelease<epicsMutex> U(G);
                     cb->process(ent.second);
                 }catch(std::exception& e){
-                    std::cout << "Error in monitor handler : " << e.what() << "\n";
+                    std::cout << "Error in pvaEventHandler WorkQueue: " << e.what() << "\n";
                 }
             }
         }
@@ -550,287 +550,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
         std::cout.flush();
         done();
     }
-};
 
-// This could go to it's own cpp file and header
-// Borrowed from pvmonitor.cpp
-struct MonTracker : public pvac::ClientChannel::MonitorCallback,
-                    public Worker,
-                    public Tracker,
-                    public std::tr1::enable_shared_from_this<MonTracker>
-{
-    POINTER_DEFINITIONS(MonTracker);
-
-    MonTracker(WorkQueue& monwork, pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, bool fCapture, bool fShow)
-        :monwork(monwork)
-        ,valid()
-        ,fCapture(fCapture)
-        ,fShow(fShow)
-        ,mon( channel.monitor(this, pvRequest) )
-    {
-		setName( channel.name() );
-        std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = mon.root;
-        assert( pvStruct != 0 );
-		std::tr1::shared_ptr<const pvd::PVScalar> pPVScalar;
-		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
-		if ( pPVScalar )
-		{
-			pvd::FieldConstPtr	pField	= pPVScalar->getField();
-			pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
-			if ( pScalar )
-			{
-				// printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", channel.name().c_str(), pField->getType(), pScalar->getScalarType() );
-				m_pvCollector = pvCollector::getPVCollector( channel.name(), pScalar->getScalarType() );
-			}
-		}
-	}
-    virtual ~MonTracker()
-    {
-        try {
-		std::cout << "~MonTracker: Cancel monitor of " << getName() << std::endl; 
-        mon.cancel();
-        }
-        catch(std::exception& e){
-            std::cout << "Error in ~MonTracker: " << e.what() << "\n";
-        }
-    }
- 
-	void restart( pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest )
-	{
-        // mon( channel.monitor(this, pvRequest) )
-		setName( channel.name() );
-		restartTracker();
-	}
-
-    WorkQueue			&   monwork;
-
-    pvd::BitSet				valid; // only access for process()
-	bool					fCapture;
-    bool					fShow;
-    //std::string			    m_Name;
-    size_t                  m_QueueSizeMax;
-    std::deque<t_TsReal>    m_ValueQueue;
-    epicsMutex      		m_QueueLock;
-	pvCollector			*	m_pvCollector;
-
-    pvac::Monitor mon; // must be last data member
-
-    /// monitorEvent is called for each new pvAccess event for specified request on this client channel
-    /// The ClientChannel defines: virtual void monitorEvent() = 0;
-    virtual void monitorEvent(const pvac::MonitorEvent& evt) OVERRIDE FINAL
-    {
-    try {
-    // TODO: Getting this error msg if I create multiple MonTracker objects for the same PV name
-    // Unhandled exception following exception in ClientChannel::MonitorCallback::monitorEvent(): epicsMutex::invalidMutex()
-    // or
-    // Unhandled exception in ClientChannel::MonitorCallback::monitorEvent(): tr1::bad_weak_ptr
-    // Unhandled exception in ClientChannel::MonitorCallback::monitorEvent(): epicsMutex::invalidMutex()
-    // Unhandled exception in ClientChannel::MonitorCallback::monitorEvent(): epicsMutex::invalidMutex()
-        // shared_from_this() will fail as Cancel is delivered in our dtor.
-        if(evt.event==pvac::MonitorEvent::Cancel) return;
-
-        // running on internal provider worker thread
-        // minimize work here.
-        monwork.push(shared_from_this(), evt);
-    }
-    catch(std::exception& e){
-        std::cout << "Error in monitorEvent : " << e.what() << "\n";
-    }
-    }
-
-    /// capture is called for each pvAccess MonitorEvent::Data on the WorkQueue
-    virtual void capture(const pvac::MonitorEvent& evt) OVERRIDE FINAL
-    {
-        assert( evt.event == pvac::MonitorEvent::Data );
-        std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = mon.root;
-        assert( pvStruct != 0 );
-
-        // std::cout << *valfld
-        // const PVFieldPtrArray & pvFields = pvStruct->getPVFields();
-        // pvStruct->getSubField<pvd::PVDouble>("value")
-        // pvStruct->getSubField<pvd::PVInt>("value")
-        // pvStruct->getSubFieldT<pvd::PVULong>("value")
-        // StructureConstPtr    structure = pvStruct->getStructure();
-        // cout << ScalarTypeFunc::name(pPVScalarValue->typeCode);
-        // cout << ScalarTypeFunc::name(PVT::typeCode);
-        // template<> const ScalarType PVDouble::typeCode = pvDouble;
-        try
-        {
-            std::tr1::shared_ptr<const pvd::PVInt>  pStatus = pvStruct->getSubField<pvd::PVInt>("alarm.status");
-            std::tr1::shared_ptr<const pvd::PVInt>  pSeverity = pvStruct->getSubField<pvd::PVInt>("alarm.severity");
-            // Only capture values w/ alarm.status NO_ALARM
-            if ( pStatus == NULL || pStatus->get() != NO_ALARM )
-                return;
-            if ( pSeverity == NULL || pSeverity->get() != 0 )
-                return;
-            std::tr1::shared_ptr<const pvd::PVDouble>   pValue  = pvStruct->getSubField<pvd::PVDouble>("value");
-            double          value           = NAN;
-            if ( pValue )
-            {
-                value = pValue->getAs<double>();
-            }
-
-            epicsUInt32     secPastEpoch    = 1;
-            epicsUInt32     nsec            = 2;
-            std::tr1::shared_ptr<const pvd::PVScalar>   pScalarSec  = pvStruct->getSubField<pvd::PVScalar>("timeStamp.secondsPastEpoch");
-            if ( pScalarSec )
-            {
-                secPastEpoch    = pScalarSec->getAs<pvd::uint32>();
-            }
-            std::tr1::shared_ptr<const pvd::PVScalar>   pScalarNSec = pvStruct->getSubField<pvd::PVScalar>("timeStamp.nanoseconds");
-            if ( pScalarNSec )
-            {
-                nsec    = pScalarNSec->getAs<pvd::uint32>();
-            }
-            epicsTimeStamp  timeStamp;
-            timeStamp.secPastEpoch = secPastEpoch;
-            timeStamp.nsec = nsec;
-            //pvd::TimeStamp    timeStamp( secPastEpoch, nsec );
-            t_TsReal    tsValue( timeStamp, value );
-            t_TsReal    tsPrior;
-            assert( isnan(tsPrior.val) );
-
-            //if ( pStatus == NULL || pStatus->get() != NO_ALARM )
-            //  return;
-            {   // Keep guard while accessing m_ValueQueue
-            epicsGuard<epicsMutex> G(m_QueueLock);
-            if ( !m_ValueQueue.empty() )
-                tsPrior = m_ValueQueue.back();
-            if ( ! isnan(tsValue.val) )
-            {
-                if( m_ValueQueue.size() >= m_QueueSizeMax )
-                    m_ValueQueue.pop_front();
-                m_ValueQueue.push_back( tsValue );
-            }
-            }
-
-            // std::cout << "tsPrior: val=" << tsPrior.val << ", ts=[" << tsPrior.ts.secPastEpoch << ", " << tsPrior.ts.nsec << "]" << "\n";
-            // std::cout << "tsValue:      val=" << tsValue.val << ", ts=[" << tsValue.ts.secPastEpoch << ", " << tsValue.ts.nsec << "]" << "\n";
-            // Check for missed counter update
-            if ( ! isnan(tsValue.val) && tsValue.val != 0 && ! isnan(tsPrior.val) )
-            {
-                if ( tsPrior.val + 1.0 != tsValue.val )
-                {
-                    if ( debugFlag )
-                    {
-                        std::cout   << "tsPrior:"
-                            << " val="  << tsPrior.val  
-                            << ", ts=[" << tsPrior.ts.secPastEpoch << ", " << tsPrior.ts.nsec << "]"
-                            << ", SEVR=" << *pSeverity
-                            << ", STAT=" << *pStatus << "\n";
-                        std::cout   << "tsValue:"
-                            << " val="  << tsValue.val  
-                            << ", ts=[" << tsValue.ts.secPastEpoch << ", " << tsValue.ts.nsec << "]"
-                            << ", SEVR=" << *pSeverity
-                            << ", STAT=" << *pStatus << "\n";
-                    }
-                    long int    nMissed = lround( tsValue.val - tsPrior.val - 1 );
-                    LOG( epics::pvAccess::logLevelError, "%s: Missed %ld, prior %ld, cur %ld", mon.name().c_str(),
-                        nMissed, static_cast<long int>(tsPrior.val), static_cast<long int>(tsValue.val) );
-                }
-            }
-        }
-        catch(std::runtime_error& e)
-        {
-            std::cout << "Bad Field Type in capture handler : " << e.what() << "\n";
-        }
-        catch(std::exception& e)
-        {
-            std::cout << "Error in capture handler : " << e.what() << "\n";
-        }
-    }
-
-    /// Save the timestamped values on the queue to a file
-    void writeValues( const std::string & testDirPath )
-    {
-        if ( m_ValueQueue.size() == 0 )
-            return;
-
-        std::string     saveFilePath( testDirPath );
-        saveFilePath += "/";
-        saveFilePath += m_Name;
-        // std::cout << "Creating test dir: " << testDirPath << std::endl;
-        mkdir( testDirPath.c_str(), ACCESSPERMS );
-
-        std::cout << "Writing " << m_ValueQueue.size() << " values to test file: " << saveFilePath << std::endl;
-        std::ofstream   fout( saveFilePath.c_str() );
-        fout << "[" << std::endl;
-        for ( std::deque<t_TsReal>::iterator it = m_ValueQueue.begin(); it != m_ValueQueue.end(); ++it )
-        {
-			fout	<<	std::fixed << std::setw(17)
-            		<< "    [ [ " << it->ts.secPastEpoch << ", " << it->ts.nsec << "], " << it->val << " ]," << std::endl;
-        }
-        fout << "]" << std::endl;
-    }
-
-    /// process is called for each pvAccess event on the WorkQueue
-    virtual void process(const pvac::MonitorEvent& evt) OVERRIDE FINAL
-    {
-    try {
-        unsigned n;
-        // running on our worker thread
-        switch(evt.event)
-        {
-        case pvac::MonitorEvent::Fail:
-            std::cerr << std::setw(pvnamewidth) << std::left << mon.name() << " Error " << evt.message << "\n";
-            haderror = 1;
-            done();
-            break;
-        case pvac::MonitorEvent::Cancel:
-            break;
-        case pvac::MonitorEvent::Disconnect:
-            std::cout << std::setw(pvnamewidth) << std::left << mon.name() << " <Disconnect>\n";
-            valid.clear();
-            break;
-        case pvac::MonitorEvent::Data:
-            for(n=0; n<2 && mon.poll(); n++)
-            {
-                valid |= mon.changed;
-
-				if ( fCapture )
-				{
-					// Capture the new value
-					capture( evt );
-				}
-
-                if ( fShow )
-                {
-                    pvd::PVStructure::Formatter fmt(mon.root->stream()
-                                                    .format(outmode));
-
-                    if(verbosity>=3)
-                        fmt.highlight(mon.changed); // show all
-                    else if(verbosity>=2)
-                        fmt.highlight(mon.changed).show(valid);
-                    else
-                        fmt.show(mon.changed); // highlight none
-
-                    std::cout << std::setw(pvnamewidth) << std::left << mon.name() << ' ' << fmt;
-                }
-            }
-            if(n==2)
-            {
-                // too many updates, re-queue to balance with others
-                monwork.push(shared_from_this(), evt);
-            }
-            else if(n==0)
-            {
-                LOG(epics::pvAccess::logLevelDebug, "%s Spurious Data event on channel", mon.name().c_str());
-            }
-            else
-            {
-                if(mon.complete())
-                    done();
-            }
-            break;
-        }
-        std::cout.flush();
-    }
-        catch(std::exception& e)
-        {
-            std::cout << "Error in capture handler : " << e.what() << "\n";
-        }
-    }
 };
 
 } // namespace
@@ -849,26 +569,18 @@ int MAIN (int argc, char *argv[])
 #else
         bool capture    = false;
 #endif
-#ifdef PVMONITOR
-        bool monitor    = true;
-#else
         bool monitor    = false;
-#endif
         bool fShow      = false;
         double repeat   = -1;
         std::string         pvFilename("");
         std::vector<std::string>    pvList;
 
         epics::RefMonitor refmon;
-#ifdef PVMONITOR
-        std::string     testDirPath( "/tmp/pvCaptureTest1" );
-#else
         std::string     testDirPath( "/tmp/pvGetTest1" );
-#endif
 
         // ================ Parse Arguments
 
-        while ((opt = getopt(argc, argv, ":hvVCSD:M:r:R:w:tmp:qdcF:f:ni")) != -1) {
+        while ((opt = getopt(argc, argv, ":hvVCSD:M:r:R:w:tp:qdcF:f:ni")) != -1) {
             switch (opt) {
             case 'h':               /* Print usage */
                 usage();
@@ -938,9 +650,6 @@ int MAIN (int argc, char *argv[])
                 break;
             case 'f':               /* Use input stream as input */
                 pvFilename = optarg;
-                break;
-            case 'm':               /* Monitor mode */
-                monitor = true;
                 break;
             case 'p':               /* Set default provider */
                 defaultProvider = optarg;
@@ -1037,15 +746,12 @@ int MAIN (int argc, char *argv[])
 			pvac::ClientChannel chan( provider.connect(*it) );
 
 			if(monitor) {
-				std::tr1::shared_ptr<MonTracker> mon(new MonTracker(*Q, chan, pvRequest, capture, fShow));
-
-				tracked.push_back(mon);
-
-			} else { // Get
-				std::tr1::shared_ptr<Getter> get( new Getter( *Q, chan, pvRequest, capture, fShow, repeat) );
-
-				tracked.push_back(get);
+				printf( "Monitor mode no longer supported!\n" );
 			}
+
+			// Get
+			std::tr1::shared_ptr<Getter> get( new Getter( *Q, chan, pvRequest, capture, fShow, repeat) );
+			tracked.push_back(get);
 		}
 
 		Tracker::prepare(); // install signal handler
