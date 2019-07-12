@@ -96,8 +96,35 @@ pvCollector * pvCollector::createPVCollector( const std::string & pvName, pvd::S
 		default:
 			printf( "createPVCollector %s: type %s not supported yet!\n", pvName.c_str(), pvd::ScalarTypeFunc::name(type) );
 			break;
+		case pvd::pvByte:
+			pCollector = new pvStorage<epicsInt8>( pvName, type );
+			break;
+		case pvd::pvUByte:
+			pCollector = new pvStorage<epicsUInt8>( pvName, type );
+			break;
+		case pvd::pvShort:
+			pCollector = new pvStorage<epicsInt16>( pvName, type );
+			break;
+		case pvd::pvUShort:
+			pCollector = new pvStorage<epicsUInt16>( pvName, type );
+			break;
+		case pvd::pvInt:
+			pCollector = new pvStorage<epicsInt32>( pvName, type );
+			break;
+		case pvd::pvUInt:
+			pCollector = new pvStorage<epicsUInt32>( pvName, type );
+			break;
+		case pvd::pvLong:
+			pCollector = new pvStorage<epicsInt64>( pvName, type );
+			break;
+		case pvd::pvULong:
+			pCollector = new pvStorage<epicsUInt64>( pvName, type );
+			break;
 		case pvd::pvDouble:
 			pCollector = new pvStorage<double>( pvName, type );
+			break;
+		case pvd::pvString:
+			pCollector = new pvStorage<std::string>( pvName, type );
 			break;
 		}
 	}
