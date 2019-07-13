@@ -12,6 +12,10 @@ PROD_HOST += pvGet
 pvGet_SRCS += pvGet.cpp
 pvGet_SRCS += pvCollector.cpp
 
+PROD_HOST += pvInfo
+pvInfo_SRCS += pvInfo.cpp
+pvInfo_SRCS += pvutils.cpp
+
 #PROD_HOST += pvget_tst
 #pvget_tst_SRCS += pvget_tst.cpp
 #pvget_tst_SRCS += pvutils.cpp
