@@ -283,8 +283,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
     size_t                 	 	m_QueueSizeMax;
     std::deque<t_TsReal>   	 	m_ValueQueue;
     epicsMutex      			m_QueueLock;
-	const pvd::PVStructurePtr	m_pvStruct; 
-	pvStorage<double>			*	m_pvCollector;
+	pvStorage<double>		*	m_pvCollector;
 	//pvac::ClientChannel			m_clientChannel;
 
     Getter(WorkQueue& monwork, pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest, bool fCapture, bool fShow, double repeat )
@@ -336,6 +335,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
             done();
             break;
         case pvac::MonitorEvent::Cancel:
+            std::cerr << std::setw(pvnamewidth) << std::left << mon.name() << " Cancel " << evt.message << "\n";
             break;
         case pvac::MonitorEvent::Disconnect:
             std::cout << std::setw(pvnamewidth) << std::left << mon.name() << " <Disconnect>\n";
@@ -370,6 +370,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
             if(n==2)
             {
                 // too many updates, re-queue to balance with others
+            	std::cerr << std::setw(pvnamewidth) << std::left << mon.name() << " re-queue " << evt.message << "\n";
                 monwork.push(shared_from_this(), evt);
             }
             else if(n==0)
@@ -396,7 +397,6 @@ struct Getter : public pvac::ClientChannel::GetCallback,
     virtual void capture(const pvac::GetEvent& evt) OVERRIDE FINAL
     {
         std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = evt.value;
-        std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct2 = m_pvStruct;
         assert( pvStruct != 0 );
 		std::tr1::shared_ptr<const pvd::PVScalar> pPVScalar;
 		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
@@ -406,10 +406,15 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 			pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
 			if ( pScalar )
 			{
-				// printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", op.name().c_str(), pField->getType(), pScalar->getScalarType() );
 				pvCollector	*	pCollector = pvCollector::getPVCollector( op.name(), pScalar->getScalarType() );
 				m_pvCollector = dynamic_cast<pvStorage<double> *>( pCollector );
 			}
+		}
+		else
+		{
+			//pvd::FieldConstPtr	pField	= pPVScalar->getField();
+			//printf( "Channel %s:	FieldType=%d\n", op.name().c_str(), pField->getType() );
+			// printf( "Channel %s:	NTScalar value: FieldType=%d, ScalarType=%d\n", op.name().c_str(), pField->getType(), pScalar->getScalarType() );
 		}
 
         // std::cout << *valfld
@@ -420,12 +425,13 @@ struct Getter : public pvac::ClientChannel::GetCallback,
         // template<> const ScalarType PVDouble::typeCode = pvDouble;
         try
         {
-            std::tr1::shared_ptr<const pvd::PVInt>  pStatus = pvStruct->getSubField<pvd::PVInt>("alarm.status");
-            std::tr1::shared_ptr<const pvd::PVInt>  pSeverity = pvStruct->getSubField<pvd::PVInt>("alarm.severity");
-            // Only capture values w/ alarm.status NO_ALARM
-            if ( pStatus == NULL || pStatus->get() != NO_ALARM )
+            std::tr1::shared_ptr<const pvd::PVInt>  pStatus		= pvStruct->getSubField<pvd::PVInt>("alarm.status");
+            std::tr1::shared_ptr<const pvd::PVInt>  pSeverity	= pvStruct->getSubField<pvd::PVInt>("alarm.severity");
+            // Don't capture values w/ timeout alarm.status
+            if ( pStatus != NULL && pStatus->get() == TIMEOUT_ALARM )
                 return;
-            if ( pSeverity == NULL || pSeverity->get() != 0 )
+            // Don't capture values w/ INVALID alarm.severity
+            if ( pSeverity != NULL && pSeverity->get() == INVALID_ALARM )
                 return;
             std::tr1::shared_ptr<const pvd::PVDouble>   pValue  = pvStruct->getSubField<pvd::PVDouble>("value");
             double          value           = NAN;
@@ -449,15 +455,32 @@ struct Getter : public pvac::ClientChannel::GetCallback,
             epicsTimeStamp  timeStamp;
             timeStamp.secPastEpoch = secPastEpoch;
             timeStamp.nsec = nsec;
-            t_TsReal    tsValue( timeStamp, value );
+			epicsUInt64		tsKey = secPastEpoch;
+			tsKey <<= 32;
+			tsKey += nsec;
 			if( m_pvCollector )
 			{
-				// printf( "Getter::Capture %s: saveValue %f\n", op.name().c_str(), value );
-				epicsUInt64		tsKey = timeStamp.secPastEpoch;
-				tsKey <<= 32;
-				tsKey += timeStamp.nsec;
+				// printf( "Getter::capture %s: saveValue %f\n", op.name().c_str(), value );
 				m_pvCollector->saveValue( tsKey, value );
 			}
+
+			std::tr1::shared_ptr<const pvd::PVScalar>   pscChannelCacheSize;
+			pscChannelCacheSize  = pvStruct->getSubField<pvd::PVScalar>( "ccacheSize.value" );
+			if ( pscChannelCacheSize )
+			{
+				std::string		nameChannelCacheSize = op.name() + ".ccacheSize.value";
+				pvd::ScalarConstPtr	pScalar = pscChannelCacheSize->getScalar();
+				pvCollector	*	pCollector = pvCollector::getPVCollector( nameChannelCacheSize, pScalar->getScalarType() );
+				pvStorage<epicsUInt64>	*	pStorage = dynamic_cast<pvStorage<epicsUInt64> *>( pCollector );
+                epicsUInt64		sChannelCache    = pscChannelCacheSize->getAs<pvd::uint64>();
+				if ( pStorage )
+				{
+					std::cout << "saveValue " << nameChannelCacheSize << " " << sChannelCache << " at [ " << secPastEpoch << ", " << nsec << " ]" << std::endl;
+					pStorage->saveValue( tsKey, sChannelCache );
+					// m_pvCollectors.push( pStorage );
+				}
+			}
+
             t_TsReal    tsPrior;
             assert( isnan(tsPrior.val) );
 
@@ -468,6 +491,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
             epicsGuard<epicsMutex> G(m_QueueLock);
             if ( !m_ValueQueue.empty() )
                 tsPrior = m_ValueQueue.back();
+            t_TsReal    tsValue( timeStamp, value );
             if ( ! isnan(tsValue.val) )
             {
                 if( m_ValueQueue.size() >= m_QueueSizeMax )
