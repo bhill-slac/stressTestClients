@@ -109,8 +109,8 @@ struct GetInfo : public pvac::ClientChannel::InfoCallback,
 					std::string		fullName( parentName );
 					fullName += ".";
 					fullName += pStruct->getFieldName(i);
-					printf( "	Field: ID %10s, Name %20s, Type %1d (%s)\n", pSubField->getID().c_str(),
-							fullName.c_str(), pSubField->getType(), pvd::TypeFunc::name( pSubField->getType() ) );
+					// printf( "	Field: ID %10s, Name %20s, Type %1d (%s)\n", pSubField->getID().c_str(),
+					// 		fullName.c_str(), pSubField->getType(), pvd::TypeFunc::name( pSubField->getType() ) );
 					showField( pSubField, fullName );
 				}
 			}
