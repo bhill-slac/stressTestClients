@@ -57,6 +57,7 @@ public:	// Public class functions
 	static void addPVCollector( const std::string & pvName, pvCollector * pPVCollector );
 	static	pvCollector		*	createPVCollector( const std::string & pvName, epics::pvData::ScalarType type );
 	static	pvCollector		*	getPVCollector( const std::string & pvName, epics::pvData::ScalarType type );
+    static void		allCollectorsWriteValues( const std::string & testDirPath );
 
 private:	// Private member variables
     epicsMutex						m_mutex;

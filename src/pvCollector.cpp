@@ -55,6 +55,19 @@ void	pvCollector::addPVCollector( const std::string & pvName, pvCollector * pPVC
 	c_instances[pvName] = pPVCollector;
 }
 
+void pvCollector::allCollectorsWriteValues( const std::string & testDirPath )
+{
+	epicsGuard<epicsMutex> G(c_mutex);
+	std::map< std::string, pvCollector * >::iterator	it;
+	for ( it = c_instances.begin(); it != c_instances.end(); ++it )
+	{
+		pvCollector	*	pCollector	= it->second;
+		pCollector->writeValues( testDirPath );
+	}
+
+	return;
+}
+
 #if 1
 pvCollector * pvCollector::getPVCollector( const std::string & pvName, pvd::ScalarType type )
 #else
