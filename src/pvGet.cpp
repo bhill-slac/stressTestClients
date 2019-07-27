@@ -302,6 +302,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
         op = channel.get(this, pvRequest);
 #endif
     }
+
     virtual ~Getter()
  	{
         try {
@@ -312,6 +313,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
             std::cout << "Error in ~Getter: " << e.what() << "\n";
         }
     }
+
 	void restart( pvac::ClientChannel& channel, const pvd::PVStructurePtr& pvRequest )
 	{
 		op.cancel();
@@ -402,7 +404,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
 		if ( pPVScalar )
 		{
-			pvd::FieldConstPtr	pField	= pPVScalar->getField();
+			//pvd::FieldConstPtr	pField	= pPVScalar->getField();
 			pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
 			if ( pScalar )
 			{
@@ -439,6 +441,8 @@ struct Getter : public pvac::ClientChannel::GetCallback,
             {
                 value = pValue->getAs<double>();
             }
+			else
+				printf( "PV %s does not have a PVDouble field named value.\n", op.name().c_str() );
 
             epicsUInt32     secPastEpoch    = 1;
             epicsUInt32     nsec            = 2;
@@ -464,6 +468,9 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 				m_pvCollector->saveValue( tsKey, value );
 			}
 
+#ifdef	SAVE_CCACHESIZE
+		// saveSubField( const std::string & fieldName )
+		// {
 			std::tr1::shared_ptr<const pvd::PVScalar>   pscChannelCacheSize;
 			pscChannelCacheSize  = pvStruct->getSubField<pvd::PVScalar>( "ccacheSize.value" );
 			if ( pscChannelCacheSize )
@@ -479,6 +486,56 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 					pStorage->saveValue( tsKey, sChannelCache );
 					// m_pvCollectors.push( pStorage );
 				}
+			}
+		// }
+#endif
+
+			// Look for any Scalar or NT values to save
+			//pvd::FieldConstPtr	pInfo = pvStruct->getField();
+			pvd::StructureConstPtr	pStruct	= pvStruct->getStructure();
+			printf( "    Field: ID dumping %zu fields, %zu pvFields.\n", pStruct->getNumberFields(), pvStruct->getNumberFields() ); 
+			for ( size_t i = 0; i < pStruct->getNumberFields(); ++i )
+			{
+				std::tr1::shared_ptr<const pvd::PVField>	pPVField	= pvStruct->getSubField(i);
+				if ( pPVField == NULL )
+				{
+					printf( "PV %s Error: Unable to access PVField %zu\n", op.name().c_str(), i );
+					continue;
+				}
+				pvd::FieldConstPtr	pField	= pPVField->getField();
+				if ( pField == NULL )
+				{
+					printf( "PV %s Error: Unable to access Field %zu\n", op.name().c_str(), i );
+					continue;
+				}
+				std::string		fullName( op.name() );
+				fullName += ".";
+				fullName += pStruct->getFieldName(i);
+				printf( "    Field: ID %-22s, Name %-25s, Type %1d (%s)", pField->getID().c_str(),
+						fullName.c_str(), pField->getType(), pvd::TypeFunc::name( pField->getType() ) );
+				if ( pField->getType() == pvd::scalar )
+				{
+					pvd::ScalarConstPtr  pScalar = std::tr1::static_pointer_cast<const pvd::Scalar>( pField );
+					if ( pScalar )
+					{
+						printf( ", ScalarType %2d (%s)", pScalar->getScalarType(), pvd::ScalarTypeFunc::name( pScalar->getScalarType() ) ); 
+						std::cout << std::endl;
+						pvCollector		*	pCollector	= pvCollector::getPVCollector( fullName, pScalar->getScalarType() );
+						pvStorage<epicsUInt64>	*	pStorage = dynamic_cast<pvStorage<epicsUInt64> *>( pCollector );
+						if ( pStorage )
+						{
+							std::cout << "saveValue " << fullName << " ";
+							pScalar->dump( std::cout );
+							std::cout << " at [ " << secPastEpoch << ", " << nsec << " ]" << std::endl;
+#if 0
+							epicsUInt64		tmpValue    = pScalar->getAs<pvd::uint64>();
+							pStorage->saveValue( tsKey, tmpValue );
+#endif
+							// m_pvCollectors.push( pStorage );
+						}
+					}
+				}
+				std::cout << std::endl;
 			}
 
             t_TsReal    tsPrior;
@@ -822,10 +879,7 @@ int MAIN (int argc, char *argv[])
 		}
 	}   while ( repeat >= 0 && !Tracker::abort );
 
-	for ( std::vector<std::tr1::shared_ptr<Tracker> >::iterator it = tracked.begin(); it != tracked.end(); ++it )
-	{
-		(*it)->writeValues( testDirPath );
-	}
+	pvCollector::allCollectorsWriteValues( testDirPath );
 
 	if(refmon.running())
 	{
