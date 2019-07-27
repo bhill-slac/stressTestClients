@@ -30,6 +30,7 @@
 #include <pv/lock.h>
 #include <pv/event.h>
 #include <pv/monitor.h>
+#include <pv/ntscalar.h>
 #include <pv/thread.h>
 #include <pv/reftrack.h>
 #include <pv/timeStamp.h>
@@ -51,7 +52,8 @@
 #define PV_GET_MAINTENANCE_VERSION  0
 #define PV_GET_DEVELOPMENT_FLAG     1
 
-namespace pvd = epics::pvData;
+namespace pvd	= epics::pvData;
+namespace nt	= epics::nt;
 
 namespace {
 
@@ -181,6 +183,60 @@ void usage (void)
             "example: " EXECNAME " double01\n\n"
 //          , request.c_str(), timeout, defaultProvider.c_str()
             , "value", 5.0, "pva" );
+}
+
+epicsUInt64	NTScalarGetTsKey( std::tr1::shared_ptr<const pvd::PVStructure> pvStruct )
+{
+	epicsUInt32     secPastEpoch    = 1;
+	epicsUInt32     nsec            = 2;
+
+	pvd::StructureConstPtr	pStruct = pvStruct->getStructure();
+	pvd::FieldConstPtr		pField	= pvStruct->getField();
+#if 0
+	printf( "\nNTScalarGetTsKey: ID %-22s, Name %-15s, Type %1d (%s)\n", pField->getID().c_str(),
+			pvStruct->getFieldName().c_str(), pField->getType(), pvd::TypeFunc::name( pField->getType() ) );
+	std::string		baseName;
+	if ( pvStruct->getFieldName().size() > 0 )
+	{
+		baseName = pvStruct->getFieldName();
+		baseName.append( "." );
+	}
+#endif
+	std::tr1::shared_ptr<const pvd::PVScalar>   pScalarSec  = pvStruct->getSubField<pvd::PVScalar>( "timeStamp.secondsPastEpoch" );
+	if ( !pScalarSec )
+	{
+		std::cout << "NTScalarGetTsKey: Unable to find " << "timeStamp.secondsPastEpoch" << std::endl;
+		printf( "   NTScalarGetTsKey: dumping %zu fields, %zu pvFields.\n", pStruct->getNumberFields(), pvStruct->getNumberFields() ); 
+		for ( size_t i = 0; i < pStruct->getNumberFields(); ++i )
+		{
+			pvd::FieldConstPtr	pSubField	= pStruct->getField(i);
+			if ( pSubField == NULL )
+			{
+				printf( "pvStruct %s Error: Unable to access Field %zu\n", pvStruct->getFieldName().c_str(), i );
+				continue;
+			}
+			printf( "    Field: ID %-22s, Name %-25s, Type %1d (%s)\n", pSubField->getID().c_str(),
+					pStruct->getFieldName(i).c_str(), pSubField->getType(), pvd::TypeFunc::name( pSubField->getType() ) );
+		}
+	}
+	else
+	{
+		secPastEpoch    = pScalarSec->getAs<pvd::uint32>();
+	}
+	std::tr1::shared_ptr<const pvd::PVScalar>   pScalarNSec = pvStruct->getSubField<pvd::PVScalar>( "timeStamp.nanoseconds" );
+	if ( pScalarNSec )
+	{
+		nsec    = pScalarNSec->getAs<pvd::uint32>();
+	}
+	//	epicsTimeStamp  timeStamp;
+	//	timeStamp.secPastEpoch = secPastEpoch;
+	//	timeStamp.nsec = nsec;
+	epicsUInt64		tsKey = secPastEpoch;
+	tsKey <<= 32;
+	tsKey += nsec;
+	std::cout << "NTScalarGetTsKey: " << pvStruct->getFieldName().c_str();
+	std::cout << " at [ " << secPastEpoch << ", " << nsec << " ]" << std::endl;
+	return tsKey;
 }
 
 // This could go to it's own cpp file and header
@@ -457,8 +513,17 @@ struct Getter : public pvac::ClientChannel::GetCallback,
                 nsec    = pScalarNSec->getAs<pvd::uint32>();
             }
             epicsTimeStamp  timeStamp;
-            timeStamp.secPastEpoch = secPastEpoch;
-            timeStamp.nsec = nsec;
+			if ( secPastEpoch != 1 || nsec != 2 )
+			{
+				timeStamp.secPastEpoch	= secPastEpoch;
+				timeStamp.nsec			= nsec;
+			}
+			else
+			{
+				epicsTimeGetCurrent( &timeStamp );
+				secPastEpoch	= timeStamp.secPastEpoch;
+				nsec			= timeStamp.nsec;
+			}
 			epicsUInt64		tsKey = secPastEpoch;
 			tsKey <<= 32;
 			tsKey += nsec;
@@ -493,9 +558,10 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 			// Look for any Scalar or NT values to save
 			//pvd::FieldConstPtr	pInfo = pvStruct->getField();
 			pvd::StructureConstPtr	pStruct	= pvStruct->getStructure();
-			printf( "    Field: ID dumping %zu fields, %zu pvFields.\n", pStruct->getNumberFields(), pvStruct->getNumberFields() ); 
+			printf( "    Field: dumping %zu fields, %zu pvFields.\n", pStruct->getNumberFields(), pvStruct->getNumberFields() ); 
 			for ( size_t i = 0; i < pStruct->getNumberFields(); ++i )
 			{
+#if 0
 				std::tr1::shared_ptr<const pvd::PVField>	pPVField	= pvStruct->getSubField(i);
 				if ( pPVField == NULL )
 				{
@@ -503,6 +569,9 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 					continue;
 				}
 				pvd::FieldConstPtr	pField	= pPVField->getField();
+#else
+				pvd::FieldConstPtr	pField	= pStruct->getField(i);
+#endif
 				if ( pField == NULL )
 				{
 					printf( "PV %s Error: Unable to access Field %zu\n", op.name().c_str(), i );
@@ -513,6 +582,63 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 				fullName += pStruct->getFieldName(i);
 				printf( "    Field: ID %-22s, Name %-25s, Type %1d (%s)", pField->getID().c_str(),
 						fullName.c_str(), pField->getType(), pvd::TypeFunc::name( pField->getType() ) );
+				if ( pField->getID() == "epics:nt/NTScalar:1.0" )
+				{
+					std::tr1::shared_ptr<const nt::NTScalar> pNTScalar;
+					pNTScalar = pvStruct->getSubField< const nt::NTScalar>( pStruct->getFieldName(i) );
+					std::tr1::shared_ptr<const pvd::PVStructure> pSubPVStruct  = pvStruct->getSubField<const pvd::PVStructure>( pStruct->getFieldName(i) );
+
+					pvd::StructureConstPtr  pSubStruct = std::tr1::static_pointer_cast<const pvd::Structure>( pField );
+					assert( nt::NTScalar::isCompatible( pSubStruct ) );
+					//assert( nt::NTScalar::isCompatible( pvStruct->getStructure() ) );
+					epicsUInt64		tsKey = NTScalarGetTsKey( pSubPVStruct );
+					if ( tsKey == 0LL )
+					{
+						tsKey = secPastEpoch;
+						tsKey <<= 32;
+						tsKey += nsec;
+					}
+					std::tr1::shared_ptr<const pvd::PVScalar>   pPVScalar;
+					//std::tr1::shared_ptr<const nt::NTScalar>   pNTScalar = nt::NTScalar::wrap( pScalar );
+					//nt::NTScalarPtr   pNTScalar = nt::NTScalar::wrap( pvStruct->getStructure() );
+					//nt::NTScalarPtr   pNTScalar = nt::NTScalar::wrap( pvStruct->getStructure() );
+					//const nt::NTScalarPtr   pNTScalar = std::tr1::static_pointer_cast<const nt::NTScalar>( pField );
+					//std::tr1::shared_ptr<const nt::NTScalar>   pNTScalar = std::tr1::static_pointer_cast<const nt::NTScalar>( pField );
+					if ( pNTScalar )
+					{
+						printf( ", NTScalar" );
+						// pStorage->saveNTScalar( tsKey, pNTScalar );
+					}
+					std::string		fieldName( pStruct->getFieldName(i) );
+					fieldName.append( ".value" );
+					pPVScalar  = pvStruct->getSubField<pvd::PVScalar>( fieldName );
+					if ( pPVScalar )
+					{
+						pvd::ScalarConstPtr	pScalar = pPVScalar->getScalar();
+						if ( pScalar )
+						{
+							printf( ", ScalarType %2d (%s)\n", pScalar->getScalarType(), pvd::ScalarTypeFunc::name( pScalar->getScalarType() ) ); 
+							pvCollector	*	pCollector = pvCollector::getPVCollector( fullName, pScalar->getScalarType() );
+							std::cout << "saveValue " << fullName << " ";
+							pPVScalar->dumpValue( std::cout );
+							std::cout << " at [ " << secPastEpoch << ", " << nsec << " ]" << std::endl;
+							switch ( pScalar->getScalarType() )
+							{
+							default:
+								printf( ", ScalarType %s not supported yet\n", pvd::ScalarTypeFunc::name( pScalar->getScalarType() ) ); 
+								break;
+							case pvd::pvULong:
+								pvStorage<epicsUInt64>	*	pStorage = dynamic_cast<pvStorage<epicsUInt64> *>( pCollector );
+								epicsUInt64		value    = pPVScalar->getAs<pvd::uint64>();
+								if ( pStorage )
+								{
+									pStorage->saveValue( tsKey, value );
+									// m_pvCollectors.push( pStorage );
+								}
+							}
+						}
+					}
+				}
 				if ( pField->getType() == pvd::scalar )
 				{
 					pvd::ScalarConstPtr  pScalar = std::tr1::static_pointer_cast<const pvd::Scalar>( pField );

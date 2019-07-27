@@ -26,6 +26,7 @@ pvInfo_SRCS += pvutils.cpp
 #PROD_HOST += pvputx
 #pvputx_SRCS += pvput.cpp
 
+PROD_LIBS += nt
 PROD_LIBS += pvAccessCA pvAccess pvData ca Com
 
 PROD_SYS_LIBS_WIN32 += ws2_32
