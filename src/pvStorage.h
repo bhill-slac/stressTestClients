@@ -48,9 +48,6 @@ public:		// Public member functions
 				typename events_t::iterator	it = m_events.end();
 				(void) m_events.insert( --it, std::make_pair( tsKey, value ) );
 			}
-			// epicsUInt32		sec		= static_cast<epicsUInt32>( tsKey >> 32 );
-			// epicsUInt32		nsec	= static_cast<epicsUInt32>( tsKey );
-			// std::cout << "pvStorageDouble::saveValue Saving " << value << " at [ " << sec << ", " << nsec << " ]" << std::endl;
 		}
 		catch( std::exception & err )
 		{
@@ -76,7 +73,7 @@ public:		// Public member functions
 		// std::cout << "Creating test dir: " << testDirPath << std::endl;
 		mkdir( testDirPath.c_str(), ACCESSPERMS );
 
-		std::cout << "Writing " << getNumSavedValues() << " values to test file: " << saveFilePath << std::endl;
+		std::cout << "pvStorage Writing " << getNumSavedValues() << " values to test file: " << saveFilePath << std::endl;
 		std::ofstream   fout( saveFilePath.c_str() );
 		writeValues( fout );
 	}
@@ -94,6 +91,7 @@ public:		// Public member functions
 					<< "    [	[ "	<< sec << ", " << nsec << "], " << it->second << " ]," << std::endl;
 		}
 		fout << "]" << std::endl;
+		// std::cout << "pvStorage Wrote " << getNumSavedValues() << " values to test file." << std::endl;
 	}
 
 public:		// Public class functions
