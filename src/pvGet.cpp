@@ -30,7 +30,9 @@
 #include <pv/lock.h>
 #include <pv/event.h>
 #include <pv/monitor.h>
+#include <pv/ntscalarArray.h>
 #include <pv/ntscalar.h>
+#include <pv/nttable.h>
 #include <pv/thread.h>
 #include <pv/reftrack.h>
 #include <pv/timeStamp.h>
@@ -597,7 +599,30 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 							default:
 								printf( ", ScalarType %s not supported yet\n", pvd::ScalarTypeFunc::name( pScalar->getScalarType() ) ); 
 								break;
+							case pvd::pvDouble:
+							{
+								pvStorage<double>	*	pStorage = dynamic_cast<pvStorage<double> *>( pCollector );
+								double		value    = pPVScalar->getAs<double>();
+								if ( pStorage )
+								{
+									pStorage->saveValue( tsKey, value );
+									// m_pvCollectors.push( pStorage );
+								}
+								break;
+							}
+							case pvd::pvLong:
+							{
+								pvStorage<epicsInt64>	*	pStorage = dynamic_cast<pvStorage<epicsInt64> *>( pCollector );
+								epicsInt64		value    = pPVScalar->getAs<pvd::int64>();
+								if ( pStorage )
+								{
+									pStorage->saveValue( tsKey, value );
+									// m_pvCollectors.push( pStorage );
+								}
+								break;
+							}
 							case pvd::pvULong:
+							{
 								pvStorage<epicsUInt64>	*	pStorage = dynamic_cast<pvStorage<epicsUInt64> *>( pCollector );
 								epicsUInt64		value    = pPVScalar->getAs<pvd::uint64>();
 								if ( pStorage )
@@ -605,11 +630,20 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 									pStorage->saveValue( tsKey, value );
 									// m_pvCollectors.push( pStorage );
 								}
+								break;
+							}
 							}
 						}
 					}
 				}
-				if ( pField->getType() == pvd::scalar )
+				else if ( pField->getID() == "epics:nt/NTTable:1.0" )
+				{
+					std::tr1::shared_ptr<const nt::NTTable> pNTTable;
+					pNTTable = pvStruct->getSubField< const nt::NTTable>( pStruct->getFieldName(i) );
+					std::tr1::shared_ptr<const pvd::PVStructure> pSubPVStruct  = pvStruct->getSubField<const pvd::PVStructure>( pStruct->getFieldName(i) );
+					printf( ", NTTable" ); 
+				}
+				else if ( pField->getType() == pvd::scalar )
 				{
 					pvd::ScalarConstPtr  pScalar = std::tr1::static_pointer_cast<const pvd::Scalar>( pField );
 					if ( pScalar )
@@ -625,6 +659,28 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 							std::cout << " at [ " << secPastEpoch << ", " << nsec << " ]" << std::endl;
 #if 0
 							epicsUInt64		tmpValue    = pScalar->getAs<pvd::uint64>();
+							pStorage->saveValue( tsKey, tmpValue );
+#endif
+							// m_pvCollectors.push( pStorage );
+						}
+					}
+				}
+				else if ( pField->getType() == pvd::scalarArray )
+				{
+					pvd::ScalarArrayConstPtr  pScalarArray = std::tr1::static_pointer_cast<const pvd::ScalarArray>( pField );
+					if ( pScalarArray )
+					{
+						printf( ", ScalarArrayType %2d (%s)", pScalarArray->getElementType(), pvd::ScalarTypeFunc::name( pScalarArray->getElementType() ) ); 
+						std::cout << std::endl;
+						pvCollector		*	pCollector	= pvCollector::getPVCollector( fullName, pScalarArray->getElementType() );
+						pvStorage<epicsUInt64>	*	pStorage = dynamic_cast<pvStorage<epicsUInt64> *>( pCollector );
+						if ( pStorage )
+						{
+							std::cout << "saveValue " << fullName << " ";
+							pScalarArray->dump( std::cout );
+							std::cout << " at [ " << secPastEpoch << ", " << nsec << " ]" << std::endl;
+#if 0
+							epicsUInt64		tmpValue    = pScalarArray->getAs<pvd::uint64>();
 							pStorage->saveValue( tsKey, tmpValue );
 #endif
 							// m_pvCollectors.push( pStorage );
