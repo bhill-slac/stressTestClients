@@ -185,7 +185,7 @@ void usage (void)
             , "value", 5.0, "pva" );
 }
 
-epicsUInt64	NTScalarGetTsKey( std::tr1::shared_ptr<const pvd::PVStructure> pvStruct )
+epicsUInt64	PVStructureGetTsKey( std::tr1::shared_ptr<const pvd::PVStructure> pvStruct )
 {
 	epicsUInt32     secPastEpoch    = 1;
 	epicsUInt32     nsec            = 2;
@@ -193,7 +193,7 @@ epicsUInt64	NTScalarGetTsKey( std::tr1::shared_ptr<const pvd::PVStructure> pvStr
 	pvd::StructureConstPtr	pStruct = pvStruct->getStructure();
 	pvd::FieldConstPtr		pField	= pvStruct->getField();
 #if 0
-	printf( "\nNTScalarGetTsKey: ID %-22s, Name %-15s, Type %1d (%s)\n", pField->getID().c_str(),
+	printf( "\nPVStructureGetTsKey: ID %-22s, Name %-15s, Type %1d (%s)\n", pField->getID().c_str(),
 			pvStruct->getFieldName().c_str(), pField->getType(), pvd::TypeFunc::name( pField->getType() ) );
 	std::string		baseName;
 	if ( pvStruct->getFieldName().size() > 0 )
@@ -205,8 +205,8 @@ epicsUInt64	NTScalarGetTsKey( std::tr1::shared_ptr<const pvd::PVStructure> pvStr
 	std::tr1::shared_ptr<const pvd::PVScalar>   pScalarSec  = pvStruct->getSubField<pvd::PVScalar>( "timeStamp.secondsPastEpoch" );
 	if ( !pScalarSec )
 	{
-		std::cout << "NTScalarGetTsKey: Unable to find " << "timeStamp.secondsPastEpoch" << std::endl;
-		printf( "   NTScalarGetTsKey: dumping %zu fields, %zu pvFields.\n", pStruct->getNumberFields(), pvStruct->getNumberFields() ); 
+		std::cout << "PVStructureGetTsKey: Unable to find " << "timeStamp.secondsPastEpoch" << std::endl;
+		printf( "   PVStructureGetTsKey: dumping %zu fields, %zu pvFields.\n", pStruct->getNumberFields(), pvStruct->getNumberFields() ); 
 		for ( size_t i = 0; i < pStruct->getNumberFields(); ++i )
 		{
 			pvd::FieldConstPtr	pSubField	= pStruct->getField(i);
@@ -234,7 +234,7 @@ epicsUInt64	NTScalarGetTsKey( std::tr1::shared_ptr<const pvd::PVStructure> pvStr
 	epicsUInt64		tsKey = secPastEpoch;
 	tsKey <<= 32;
 	tsKey += nsec;
-	std::cout << "NTScalarGetTsKey: " << pvStruct->getFieldName().c_str();
+	std::cout << "PVStructureGetTsKey: " << pvStruct->getFieldName().c_str();
 	std::cout << " at [ " << secPastEpoch << ", " << nsec << " ]" << std::endl;
 	return tsKey;
 }
@@ -591,7 +591,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 					pvd::StructureConstPtr  pSubStruct = std::tr1::static_pointer_cast<const pvd::Structure>( pField );
 					assert( nt::NTScalar::isCompatible( pSubStruct ) );
 					//assert( nt::NTScalar::isCompatible( pvStruct->getStructure() ) );
-					epicsUInt64		tsKey = NTScalarGetTsKey( pSubPVStruct );
+					epicsUInt64		tsKey = PVStructureGetTsKey( pSubPVStruct );
 					if ( tsKey == 0LL )
 					{
 						tsKey = secPastEpoch;
