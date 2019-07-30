@@ -38,7 +38,7 @@ public:		// Public member functions
     void saveValues( std::list< std::pair<epicsUInt64,T> > newValues );
 
     void writeValues( const std::string & testDirPath );
-    void writeValues( std::ostream & fout );
+    virtual void writeValues( std::ostream & fout ) = 0;
 
 	virtual size_t getNumSavedValues( )
 	{

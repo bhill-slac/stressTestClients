@@ -179,25 +179,9 @@ void pvCollector::writeValues( const std::string & testDirPath )
 		std::cerr << strerror(errno) << std::endl;
 	}
 
-	std::cout << "Writing " << getNumSavedValues() << " values to test file: " << saveFilePath << std::endl;
+	std::cout << "pvCollector Writing " << getNumSavedValues() << " values to test file: " << saveFilePath << std::endl;
 	std::ofstream   fout( saveFilePath.c_str() );
 	writeValues( fout );
-#if 0
-	fout << "[" << std::endl;
-	for ( std::deque<t_TsReal>::iterator it = m_ValueQueue.begin(); it != m_ValueQueue.end(); ++it )
-	{
-		fout	<<	std::fixed << std::setw(17)
-				<< "    [	[ "	<< it->ts.secPastEpoch << ", " << it->ts.nsec << "], " << it->val << " ]," << std::endl;
-	}
-	fout << "]" << std::endl;
-#endif
-}
-
-
-void pvCollector::writeValues( std::ostream & fout )
-{
-	fout << "[" << std::endl;
-	fout << "]" << std::endl;
 }
 
 #if 0
@@ -217,6 +201,7 @@ void pvCollector::writeValues( std::ostream & output )
 				<< "    [	[ "	<< sec << ", " << nsec << "], " << it->second << " ]," << std::endl;
 	}
 	output << "]" << std::endl;
+	std::cout << "pvCollector Wrote " << getNumSavedValues() << " values to test file." << std::endl;
 }
 #endif
 
