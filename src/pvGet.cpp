@@ -422,9 +422,8 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 #endif
 
     /// capture is called for each pvAccess MonitorEvent::Data
-    virtual void capture(const pvac::GetEvent& evt) OVERRIDE FINAL
+    virtual void capture( const std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct ) OVERRIDE FINAL
     {
-        std::tr1::shared_ptr<const pvd::PVStructure>    pvStruct = evt.value;
         assert( pvStruct != 0 );
 		std::tr1::shared_ptr<const pvd::PVScalar> pPVScalar;
 		pPVScalar = pvStruct->getSubField<pvd::PVScalar>("value");
@@ -707,7 +706,7 @@ struct Getter : public pvac::ClientChannel::GetCallback,
 			if ( fCapture )
 			{
 				// Capture the new value
-				capture( event );
+				capture( event.value );
 			}
 
 			if ( fShow ) {
