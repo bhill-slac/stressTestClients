@@ -23,7 +23,7 @@ namespace pvd = epics::pvData;
 // timeout to flush partial events
 static double maxEventAge = 2.5;
 
-int collectorDebug;
+int collectorDebug = 1;
 
 #if 1
 size_t		pvCollector::c_num_instances	= 0;
@@ -98,7 +98,8 @@ template<> pvCollector<double> * pvCollector<double>::getPVCollector( const std:
 
 pvCollector * pvCollector::createPVCollector( const std::string & pvName, pvd::ScalarType type )
 {
-	printf( "createPVCollector %s: type %s\n", pvName.c_str(), pvd::ScalarTypeFunc::name(type) );
+	if ( collectorDebug >= 2 )
+		printf( "createPVCollector %s: type %s\n", pvName.c_str(), pvd::ScalarTypeFunc::name(type) );
 	epicsGuard<epicsMutex> G(c_mutex);
 	
 	pvCollector	*	pCollector	= NULL;
