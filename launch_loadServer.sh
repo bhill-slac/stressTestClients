@@ -33,23 +33,23 @@ TEST_APPTYPE=loadServer
 if [ -f $SCRIPTDIR/${TEST_APPTYPE}Default.env ]; then
 	source $SCRIPTDIR/${TEST_APPTYPE}Default.env
 fi
-if [ -f $TEST_TOP/default.env ]; then
-	source $TEST_TOP/default.env
+if [ -f $STRESSTEST_TOP/default.env ]; then
+	source $STRESSTEST_TOP/default.env
 fi
-if [ -f $TEST_TOP/${TESTNAME}/test.env ]; then
-	source $TEST_TOP/${TESTNAME}/test.env 
+if [ -f $STRESSTEST_TOP/${TESTNAME}/test.env ]; then
+	source $STRESSTEST_TOP/${TESTNAME}/test.env 
 fi
-if [ -f $TEST_TOP/${TESTNAME}/${TESTNAME}.env ]; then
+if [ -f $STRESSTEST_TOP/${TESTNAME}/${TESTNAME}.env ]; then
 	echo "Use of ${TESTNAME}/${TESTNAME}.env is deprecated"
 	echo "Please rename to ${TESTNAME}/test.env"
-	source $TEST_TOP/${TESTNAME}/${TESTNAME}.env 
+	source $STRESSTEST_TOP/${TESTNAME}/${TESTNAME}.env 
 fi
 
 # Gateway port test env
 #TEST_EPICS_PVA_SERVER_PORT=5086
 #TEST_EPICS_PVA_BROADCAST_PORT=5086
 
-TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+TEST_HOST_DIR=$STRESSTEST_TOP/$TESTNAME/$HOSTNAME
 mkdir -p $TEST_HOST_DIR
 TEST_LOG=$TEST_HOST_DIR/$TESTNAME-${TEST_APPTYPE}.log
 echo TESTNAME=$TESTNAME | tee $TEST_LOG

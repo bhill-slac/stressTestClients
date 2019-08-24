@@ -25,22 +25,22 @@ TEST_APPTYPE=run_pvget
 if [ -f $SCRIPTDIR/${TEST_APPTYPE}Default.env ]; then
 	source $SCRIPTDIR/${TEST_APPTYPE}Default.env
 fi
-if [ -f $TEST_TOP/default.env ]; then
-	source $TEST_TOP/default.env
+if [ -f $STRESSTEST_TOP/default.env ]; then
+	source $STRESSTEST_TOP/default.env
 fi
-if [ -f $TEST_TOP/${TESTNAME}/test.env ]; then
-	source $TEST_TOP/${TESTNAME}/test.env 
+if [ -f $STRESSTEST_TOP/${TESTNAME}/test.env ]; then
+	source $STRESSTEST_TOP/${TESTNAME}/test.env 
 fi
-if [ -f $TEST_TOP/${TESTNAME}/${TESTNAME}.env ]; then
+if [ -f $STRESSTEST_TOP/${TESTNAME}/${TESTNAME}.env ]; then
 	echo "Use of ${TESTNAME}/${TESTNAME}.env is deprecated"
 	echo "Please rename to ${TESTNAME}/test.env"
-	source $TEST_TOP/${TESTNAME}/${TESTNAME}.env 
+	source $STRESSTEST_TOP/${TESTNAME}/${TESTNAME}.env 
 fi
 
 CLIENT_NAME=pvget_gw
 TEST_N_RUN_PVGET_CLIENTS=1
 
-TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+TEST_HOST_DIR=$STRESSTEST_TOP/$TESTNAME/$HOSTNAME
 mkdir -p $TEST_HOST_DIR
 TEST_LOG=$TEST_HOST_DIR/$TESTNAME-${TEST_APPTYPE}.log
 
@@ -56,7 +56,7 @@ echo Start: `date` | tee -a $TEST_LOG
 
 
 # Run test
-TEST_HOST_DIR=$TEST_TOP/$TESTNAME/$HOSTNAME
+TEST_HOST_DIR=$STRESSTEST_TOP/$TESTNAME/$HOSTNAME
 TEST_DIR=$TEST_HOST_DIR/clients
 mkdir -p $TEST_DIR
 uname -a > $TEST_HOST_DIR/uname.info
