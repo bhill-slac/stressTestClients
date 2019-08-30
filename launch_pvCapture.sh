@@ -3,8 +3,10 @@ if [ $# -lt 1 -o "$1" == "-h" ]; then
 	echo Usage: $(basename ${BASH_SOURCE[0]}) testName
 	exit 1
 fi
+SCRIPTDIR=`readlink -f $(dirname ${BASH_SOURCE[0]})`
 TESTNAME=$1
 
+# Make sure we can find procServ and pyProcMgr.py
 PROCSERV=`which procServ`
 if [ ! -e "$PROCSERV" ]; then
 	echo "Error: procServ not found!"
@@ -17,11 +19,38 @@ if [ ! -e "$PYPROCMGR" ]; then
 	exit 1
 fi
 
+# This part can be replaced w/ python front end
+# for each host
+#	ssh to host and launch a stressTestMgr.py instance
+#
+# Start test: date > $STRESSTEST_TOP/$TESTNAME/startTime
+
+# Each stressTestMgr.py instance does the following:
+# Monitor startTime files
+# if currentTime < startTime + 1 sec
+#	Read configuration from env files
+#	Generate pvlist if APPTYPE is pvCapture
+#	Dump test env variables to log
+#	Dump host info to $STRESSTEST_TOP/$TESTNAME/$HOSTNAME/*.info
+#   For each client
+#		if currentTime > startTime + clientStartDelay
+#			launch client pyProcMgr instance
+#		if currentTime > startTime + testDuration + clientStopDelay
+#			kill client pyProcMgr instance
+#	Do periodic timestamped cat of /proc/loadavg into TEST_LOG
+#		% cat /proc/loadavg
+#		0.01 0.04 0.05 1/811 22246
+#		1min 5min 15min numExecuting/numProcessesAndThreads lastPID
+#	if currentTime > stopTime
+#   	For each client
+#			if currentTime > startTime + testDuration + clientStopDelay
+#				kill client pyProcMgr instance
+
+#
+
+
+# Get hostname
 HOSTNAME=`hostname -s`
-
-TOP=`readlink -f $(dirname ${BASH_SOURCE[0]})`
-
-SCRIPTDIR=`dirname ${BASH_SOURCE[0]}`
 
 # Configure Test
 TEST_APPTYPE=pvCapture
@@ -68,16 +97,6 @@ echo TEST_N_LOADSERVERS=$TEST_N_LOADSERVERS
 echo N_CNT_PER_SERVER=$N_CNT_PER_SERVER
 echo N_PVS_PER_CLIENT=$N_PVS_PER_CLIENT
 
-echo Start: `date` | tee -a $TEST_LOG
-
-# Run test
-TEST_HOST_DIR=$STRESSTEST_TOP/$TESTNAME/$HOSTNAME
-TEST_DIR=$TEST_HOST_DIR/clients
-mkdir -p $TEST_DIR
-uname -a > $TEST_HOST_DIR/uname.info
-cat /proc/cpuinfo > $TEST_HOST_DIR/cpu.info
-cat /proc/meminfo > $TEST_HOST_DIR/mem.info
-
 # Create PV Lists for pvCapture clients
 P=0
 C=0
@@ -119,13 +138,27 @@ for (( N = 0; N < $N_CNT_PER_SERVER ; ++N )) do
 	done
 done
 
-cd $TOP
+TEST_HOST_DIR=$STRESSTEST_TOP/$TESTNAME/$HOSTNAME
+TEST_DIR=$TEST_HOST_DIR/clients
 
-# export variables that will be expanded by pyProcMgr
-export TEST_DIR 
+#!/bin/bash
+# From here down can be used as a generic pvCapture launch script
+cd $SCRIPTDIR
 
-#echo $PYPROCMGR -c $TEST_N_PVCAPTURE ...
-$PYPROCMGR -v -c $TEST_N_PVCAPTURE -n $TEST_APPTYPE -p $TEST_PVCAPTURE_BASEPORT -d 5.0 -D $TEST_DIR \
-	'bin/$EPICS_HOST_ARCH/pvCapture -S -D $TEST_DIR/pvCapture$PYPROC_ID -f $TEST_DIR/pvCapture$PYPROC_ID/pvs.list'; \
-echo Done: `date` | tee -a $TEST_LOG
+if [ `hostname -s` == "$HOSTNAME" ]; then
+	# Run test on host
+	echo Start: `date` | tee -a $TEST_LOG
 
+	mkdir -p $TEST_DIR
+	uname -a > $TEST_HOST_DIR/uname.info
+	cat /proc/cpuinfo > $TEST_HOST_DIR/cpu.info
+	cat /proc/meminfo > $TEST_HOST_DIR/mem.info
+	cat /proc/loadavg > $TEST_HOST_DIR/loadavg.info
+
+	# export variables that will be expanded by pyProcMgr
+	export TEST_DIR 
+
+	$PYPROCMGR -v -c $TEST_N_PVCAPTURE -n $TEST_APPTYPE -p $TEST_PVCAPTURE_BASEPORT -d 5.0 -D $TEST_DIR \
+		'bin/$EPICS_HOST_ARCH/pvCapture -S -D $TEST_DIR/pvCapture$PYPROC_ID -f $TEST_DIR/pvCapture$PYPROC_ID/pvs.list'; \
+	echo Done: `date` | tee -a $TEST_LOG
+fi
