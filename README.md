@@ -17,30 +17,40 @@ GW\_TESTS=/reg/d/iocData/gwTest
 TEST\_NAME=YourTestName
 $TEST\_TOP=$GW\_TESTS/$TEST\_NAME
 
+Environment files are simple VARIABLE=Value environment variable definitions.
+Value can contain other simple environment variable references.
+Examples w/ A,B,C variants indicate user can supply 0 or more w/ arbitrary names.
+
+For example:
+	APP\_TYPE=pvCapture
+	CLIENT\_NAME=${APP\_TYPE}SinglePv
+	LOG_FILE=${TEST_TOP}/${HOSTNAME}/${CLIENT_NAME}/${CLIENT_NAME}.log
+
+Order in which test environment files are read:
 $TEST\_TOP/test.env                                          Env settings for this test
-$TEST\_TOP/*loadServerA*.env                                 loadServerA env settings
-$TEST\_TOP/*loadServerB*.env                                 loadServerB env settings
-$TEST\_TOP/*loadServerC*.env                                 loadServerC env settings
+$TEST\_TOP/loadServer*A*.env                                 loadServerA env settings
+$TEST\_TOP/loadServer*B*.env                                 loadServerB env settings
+$TEST\_TOP/loadServer*C*.env                                 loadServerC env settings
 ...
-$TEST\_TOP/*clientA*.env                                     ClientA env settings
-$TEST\_TOP/*clientB*.env                                     ClientB env settings
-$TEST\_TOP/*clientC*.env                                     ClientC env settings
+$TEST\_TOP/client*A*.env                                     clientA env settings
+$TEST\_TOP/client*B*.env                                     clientB env settings
+$TEST\_TOP/client*C*.env                                     clientC env settings
 ...
-$TEST\_TOP/*launch_clientA*.sh                               ClientA launch script
-$TEST\_TOP/*launch_clientB*.sh                               ClientB launch script
-$TEST\_TOP/*launch_clientC*.sh                               ClientC launch script
+$TEST\_TOP/launch\_client*A*.sh                              clientA launch script
+$TEST\_TOP/launch\_client*B*.sh                              clientB launch script
+$TEST\_TOP/launch\_client*C*.sh                              clientC launch script
 ...
 $TEST\_TOP/*hostname*/cpu.info                               Host CPU Info
 $TEST\_TOP/*hostname*/mem.info                               Host Memory Info
 $TEST\_TOP/*hostname*/uname.info                             Host OS Info
-$TEST\_TOP/*hostname*/clients/*clientA00*                    Directory for clientA00 files
-$TEST\_TOP/*hostname*/clients/*clientA01*                    Directory for clientA01 files
+$TEST\_TOP/*hostname*/clients/client*A*00                    Directory for clientA00 files
+$TEST\_TOP/*hostname*/clients/client*A*01                    Directory for clientA01 files
 ...
-$TEST\_TOP/*hostname*/clients/*clientA00*/pvs.list           clientA00 PV list
-$TEST\_TOP/*hostname*/clients/*clientA00*/*clientA00*.log    clientA00 console output
-$TEST\_TOP/*hostname*/clients/*clientA00*/*pvName*.pvget     clientA00 PV data from run\_pvget.sh
-$TEST\_TOP/*hostname*/clients/*clientA00*/*pvName*.pvGet     clientA00 PV data from pvGet
-$TEST\_TOP/*hostname*/clients/*clientA00*/*pvName*.pvCapture clientA00 PV data from pvCapture
+$TEST\_TOP/*hostname*/clients/client*A*00/pvs.list           clientA00 PV list
+$TEST\_TOP/*hostname*/clients/client*A*00/client*A*00.log    clientA00 console output
+$TEST\_TOP/*hostname*/clients/client*A*00/*pvName*.pvget     clientA00 PV data from run\_pvget.sh
+$TEST\_TOP/*hostname*/clients/client*A*00/*pvName*.pvGet     clientA00 PV data from pvGet
+$TEST\_TOP/*hostname*/clients/client*A*00/*pvName*.pvCapture clientA00 PV data from pvCapture
 
 --------------------
 **Configuration env variables**
