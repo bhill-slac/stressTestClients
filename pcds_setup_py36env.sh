@@ -1,5 +1,5 @@
 #!/bin/bash
-source /reg/g/pcds/package/conda/py36env.sh
+source /reg/g/pcds/package/conda/env-miniconda3.sh
 conda activate pva-gw
 source $SETUP_SITE_TOP/epicsenv-bleeding_edge-7.0.sh 
 #source $SETUP_SITE_TOP/epicsenv-7.0.2-2.0.sh
